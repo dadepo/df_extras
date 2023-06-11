@@ -36,7 +36,7 @@ mod tests {
     async fn test_broadcast() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select broadcast(ip) as broadcast from test")
+            .sql("select _broadcast(ip) as broadcast from test")
             .await?;
 
         let batches = df.clone().collect().await?;
