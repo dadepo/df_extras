@@ -1,11 +1,11 @@
 use datafusion::arrow::array::{ArrayRef, StringArray};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
-use ipnet::IpNet;
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use std::str::FromStr;
 use std::sync::Arc;
 
-/// Gives the broadcast address for network
+/// Gives the broadcast address for network.
 pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut result: Vec<String> = vec![];
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
@@ -19,6 +19,25 @@ pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
         Ok::<(), DataFusionError>(())
     })?;
 
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
+/// Returns the address's family: 4 for IPv4, 6 for IPv6.
+pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+    ip_string.iter().flatten().try_for_each(|ip_string| {
+        let family = if ip_string.parse::<Ipv4Net>().is_ok() {
+            4.to_string()
+        } else if ip_string.parse::<Ipv6Net>().is_ok() {
+            6.to_string()
+        } else {
+            return Err(DataFusionError::Internal(format!("Could not parse {ip_string} to either IPv4 or IPv6")))
+        };
+
+        result.push(family);
+        Ok::<(), DataFusionError>(())
+    })?;
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
@@ -60,6 +79,39 @@ mod tests {
                 }
             })
             .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_family() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select _family(ip) as family from test")
+            .await?;
+
+     let batches = df.clone().collect().await?;
+
+     let expected: Vec<&str> = r#"
++--------+
+| family |
++--------+
+| 4      |
+| 4      |
+| 4      |
+| 6      |
+| 6      |
++--------+"#
+            .split("\n")
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
         assert_batches_sorted_eq!(expected, &batches);
         Ok(())
     }
