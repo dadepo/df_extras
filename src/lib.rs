@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType::Utf8;
+use datafusion::arrow::datatypes::DataType::{UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
@@ -50,7 +50,7 @@ fn register_host(ctx: &SessionContext) {
 
 fn register_family(ctx: &SessionContext) {
     let family_udf = make_scalar_function(family);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(UInt8)));
     let family_udf = ScalarUDF::new(
         "_family",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),

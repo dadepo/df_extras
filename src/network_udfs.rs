@@ -1,9 +1,10 @@
-use datafusion::arrow::array::{ArrayRef, StringArray};
+use datafusion::arrow::array::{ArrayRef, StringArray, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use std::str::FromStr;
 use std::sync::Arc;
+use datafusion::arrow::datatypes::DataType::UInt8;
 
 /// Gives the broadcast address for network.
 pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -41,13 +42,13 @@ pub fn host(args: &[ArrayRef]) -> Result<ArrayRef> {
 
 /// Returns the address's family: 4 for IPv4, 6 for IPv6.
 pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut result: Vec<u8> = vec![];
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let family = if ip_string.parse::<Ipv4Net>().is_ok() {
-            4.to_string()
+            4
         } else if ip_string.parse::<Ipv6Net>().is_ok() {
-            6.to_string()
+            6
         } else {
             return Err(DataFusionError::Internal(format!("Could not parse {ip_string} to either IPv4 or IPv6")))
         };
@@ -55,7 +56,7 @@ pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
         result.push(family);
         Ok::<(), DataFusionError>(())
     })?;
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(UInt8Array::from(result)) as ArrayRef)
 }
 
 #[cfg(test)]
