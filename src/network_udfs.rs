@@ -22,6 +22,23 @@ pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
+/// Gives the host address for network.
+pub fn host(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+    ip_string.iter().flatten().try_for_each(|ip_string| {
+        let host_address = IpNet::from_str(ip_string)
+            .map_err(|e| {
+                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+            })?
+            .network();
+        result.push(host_address.to_string());
+        Ok::<(), DataFusionError>(())
+    })?;
+
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
 /// Returns the address's family: 4 for IPv4, 6 for IPv6.
 pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut result: Vec<String> = vec![];
@@ -70,6 +87,39 @@ mod tests {
 | 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff |
 | 2001:db8:abcd:ffff:ffff:ffff:ffff:ffff |
 +----------------------------------------+"#
+            .split("\n")
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+
+    #[tokio::test]
+    async fn test_host() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select _host(ip) as broadcast from test")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-----------------+
+| broadcast       |
++-----------------+
+| 192.168.1.0     |
+| 172.16.0.0      |
+| 10.0.0.0        |
+| 2001:db8::      |
+| 2001:db8:abcd:: |
++-----------------+"#
             .split("\n")
             .filter_map(|input| {
                 if input.is_empty() {
