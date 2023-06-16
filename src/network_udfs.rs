@@ -59,6 +59,23 @@ pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(UInt8Array::from(result)) as ArrayRef)
 }
 
+/// construct host mask for network
+pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+    ip_string.iter().flatten().try_for_each(|ip_string| {
+        let hostmask = IpNet::from_str(ip_string)
+            .map_err(|e| {
+                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+            })?
+            .hostmask();
+        result.push(hostmask.to_string());
+        Ok::<(), DataFusionError>(())
+    })?;
+
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,6 +138,39 @@ mod tests {
 | 2001:db8::      |
 | 2001:db8:abcd:: |
 +-----------------+"#
+            .split("\n")
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+
+    #[tokio::test]
+    async fn test_hostmask() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select _hostmask(ip) as hostmask from test")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++---------------------------------+
+| hostmask                        |
++---------------------------------+
+| 0.0.0.255                       |
+| 0.0.15.255                      |
+| 0.0.255.255                     |
+| ::ffff:ffff:ffff:ffff:ffff:ffff |
+| ::ffff:ffff:ffff:ffff:ffff      |
++---------------------------------+"#
             .split("\n")
             .filter_map(|input| {
                 if input.is_empty() {
