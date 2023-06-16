@@ -91,7 +91,7 @@ mod tests {
     async fn test_broadcast() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select _broadcast(ip) as broadcast from test")
+            .sql("select pg_broadcast(ip) as broadcast from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -122,7 +122,7 @@ mod tests {
     #[tokio::test]
     async fn test_host() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx.sql("select _host(ip) as broadcast from test").await?;
+        let df = ctx.sql("select pg_host(ip) as broadcast from test").await?;
 
         let batches = df.clone().collect().await?;
 
@@ -153,7 +153,7 @@ mod tests {
     async fn test_hostmask() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select _hostmask(ip) as hostmask from test")
+            .sql("select pg_hostmask(ip) as hostmask from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -184,7 +184,7 @@ mod tests {
     #[tokio::test]
     async fn test_family() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx.sql("select _family(ip) as family from test").await?;
+        let df = ctx.sql("select pg_family(ip) as family from test").await?;
 
         let batches = df.clone().collect().await?;
 

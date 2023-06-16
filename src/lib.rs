@@ -27,7 +27,7 @@ fn register_broadcast(ctx: &SessionContext) {
     let broadcast_udf = make_scalar_function(broadcast);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let broadcast_udf = ScalarUDF::new(
-        "_broadcast",
+        "pg_broadcast",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &broadcast_udf,
@@ -40,7 +40,7 @@ fn register_host(ctx: &SessionContext) {
     let host_udf = make_scalar_function(host);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let host_udf = ScalarUDF::new(
-        "_host",
+        "pg_host",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &host_udf,
@@ -53,7 +53,7 @@ fn register_hostmask(ctx: &SessionContext) {
     let hostmask_udf = make_scalar_function(hostmask);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let hostmask_udf = ScalarUDF::new(
-        "_hostmask",
+        "pg_hostmask",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &hostmask_udf,
@@ -66,7 +66,7 @@ fn register_family(ctx: &SessionContext) {
     let family_udf = make_scalar_function(family);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(UInt8)));
     let family_udf = ScalarUDF::new(
-        "_family",
+        "pg_family",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &family_udf,
