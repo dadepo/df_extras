@@ -4,7 +4,6 @@ use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use std::str::FromStr;
 use std::sync::Arc;
-use datafusion::arrow::datatypes::DataType::UInt8;
 
 /// Gives the broadcast address for network.
 pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -50,7 +49,9 @@ pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
         } else if ip_string.parse::<Ipv6Net>().is_ok() {
             6
         } else {
-            return Err(DataFusionError::Internal(format!("Could not parse {ip_string} to either IPv4 or IPv6")))
+            return Err(DataFusionError::Internal(format!(
+                "Could not parse {ip_string} to either IPv4 or IPv6"
+            )));
         };
 
         result.push(family);
@@ -105,7 +106,7 @@ mod tests {
 | 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff |
 | 2001:db8:abcd:ffff:ffff:ffff:ffff:ffff |
 +----------------------------------------+"#
-            .split("\n")
+            .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
                     None
@@ -118,13 +119,10 @@ mod tests {
         Ok(())
     }
 
-
     #[tokio::test]
     async fn test_host() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx
-            .sql("select _host(ip) as broadcast from test")
-            .await?;
+        let df = ctx.sql("select _host(ip) as broadcast from test").await?;
 
         let batches = df.clone().collect().await?;
 
@@ -138,7 +136,7 @@ mod tests {
 | 2001:db8::      |
 | 2001:db8:abcd:: |
 +-----------------+"#
-            .split("\n")
+            .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
                     None
@@ -150,7 +148,6 @@ mod tests {
         assert_batches_sorted_eq!(expected, &batches);
         Ok(())
     }
-
 
     #[tokio::test]
     async fn test_hostmask() -> Result<()> {
@@ -171,7 +168,7 @@ mod tests {
 | ::ffff:ffff:ffff:ffff:ffff:ffff |
 | ::ffff:ffff:ffff:ffff:ffff      |
 +---------------------------------+"#
-            .split("\n")
+            .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
                     None
@@ -187,13 +184,11 @@ mod tests {
     #[tokio::test]
     async fn test_family() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx
-            .sql("select _family(ip) as family from test")
-            .await?;
+        let df = ctx.sql("select _family(ip) as family from test").await?;
 
-     let batches = df.clone().collect().await?;
+        let batches = df.clone().collect().await?;
 
-     let expected: Vec<&str> = r#"
+        let expected: Vec<&str> = r#"
 +--------+
 | family |
 +--------+
@@ -203,7 +198,7 @@ mod tests {
 | 6      |
 | 6      |
 +--------+"#
-            .split("\n")
+            .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
                     None
