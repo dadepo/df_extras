@@ -111,6 +111,22 @@ pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
+pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+    ip_string.iter().flatten().try_for_each(|ip_string| {
+        let network = IpNet::from_str(ip_string)
+            .map_err(|e| {
+                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+            })?
+            .network();
+        result.push(network.to_string());
+        Ok::<(), DataFusionError>(())
+    })?;
+
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,7 +269,6 @@ mod tests {
             .sql("select pg_masklen(ip) as masklen from test")
             .await?;
 
-        df.clone().show().await?;
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
@@ -287,7 +302,6 @@ mod tests {
             .sql("select pg_netmask(ip) as netmask from test")
             .await?;
 
-        df.clone().show().await?;
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
@@ -300,6 +314,39 @@ mod tests {
 | ffff:ffff::      |
 | ffff:ffff:ffff:: |
 +------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_network() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_network(ip) as network from test")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-----------------+
+| network         |
++-----------------+
+| 192.168.1.0     |
+| 172.16.0.0      |
+| 10.0.0.0        |
+| 2001:db8::      |
+| 2001:db8:abcd:: |
++-----------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {

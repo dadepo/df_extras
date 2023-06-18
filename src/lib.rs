@@ -6,22 +6,23 @@ use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatil
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
-use crate::network_udfs::{broadcast, family, host, hostmask, masklen, netmask};
+use crate::network_udfs::{broadcast, family, host, hostmask, masklen, netmask, network};
 
 mod network_udfs;
 
 pub fn register_udfs(ctx: &SessionContext) -> Result<()> {
-    register_network(ctx)?;
+    register_network_udfs(ctx)?;
     Ok(())
 }
 
-fn register_network(ctx: &SessionContext) -> Result<()> {
+fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_broadcast(ctx);
     register_host(ctx);
     register_hostmask(ctx);
     register_family(ctx);
     register_masklen(ctx);
     register_netmask(ctx);
+    register_network(ctx);
     Ok(())
 }
 
@@ -103,17 +104,15 @@ fn register_netmask(ctx: &SessionContext) {
     ctx.register_udf(netmask_udf);
 }
 
-pub fn add(left: usize, right: usize) -> usize {
-    left + right
-}
+fn register_network(ctx: &SessionContext) {
+    let network_udf = make_scalar_function(network);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
+    let network_udf = ScalarUDF::new(
+        "pg_network",
+        &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
+        &return_type,
+        &network_udf,
+    );
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+    ctx.register_udf(network_udf);
 }
