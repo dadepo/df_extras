@@ -6,7 +6,7 @@ use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatil
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
-use crate::network_udfs::{broadcast, family, host, hostmask, masklen};
+use crate::network_udfs::{broadcast, family, host, hostmask, masklen, netmask};
 
 mod network_udfs;
 
@@ -21,6 +21,7 @@ fn register_network(ctx: &SessionContext) -> Result<()> {
     register_hostmask(ctx);
     register_family(ctx);
     register_masklen(ctx);
+    register_netmask(ctx);
     Ok(())
 }
 
@@ -87,6 +88,19 @@ fn register_masklen(ctx: &SessionContext) {
     );
 
     ctx.register_udf(masklen_udf);
+}
+
+fn register_netmask(ctx: &SessionContext) {
+    let netmask_udf = make_scalar_function(netmask);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
+    let netmask_udf = ScalarUDF::new(
+        "pg_netmask",
+        &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
+        &return_type,
+        &netmask_udf,
+    );
+
+    ctx.register_udf(netmask_udf);
 }
 
 pub fn add(left: usize, right: usize) -> usize {

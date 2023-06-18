@@ -94,6 +94,23 @@ pub fn masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(UInt8Array::from(result)) as ArrayRef)
 }
 
+/// construct netmask for network
+pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+    ip_string.iter().flatten().try_for_each(|ip_string| {
+        let netmask = IpNet::from_str(ip_string)
+            .map_err(|e| {
+                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+            })?
+            .netmask();
+        result.push(netmask.to_string());
+        Ok::<(), DataFusionError>(())
+    })?;
+
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,6 +266,40 @@ mod tests {
 | 32      |
 | 48      |
 +---------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_netmask() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_netmask(ip) as netmask from test")
+            .await?;
+
+        df.clone().show().await?;
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++------------------+
+| netmask          |
++------------------+
+| 255.255.255.0    |
+| 255.255.240.0    |
+| 255.255.0.0      |
+| ffff:ffff::      |
+| ffff:ffff:ffff:: |
++------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
