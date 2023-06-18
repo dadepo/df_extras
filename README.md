@@ -9,7 +9,7 @@ https://www.postgresql.org/docs/current/functions-net.html
 |      ✔      | family(inet)            | int         | extract family of address; 4 for IPv4, 6 for IPv6         | family('::1')                                      | 6               |
 |      ✔      | host(inet)              | text        | extract IP address as text                                | host('192.168.1.5/24')                              | 192.168.1.5     |
 |      ✔      | hostmask(inet)          | inet        | construct host mask for network                           | hostmask('192.168.23.20/30')                        | 0.0.0.3         |
-|      ❌      | masklen(inet)           | int         | extract netmask length                                    | masklen('192.168.1.5/24')                           | 24              |
+|      ✔      | masklen(inet)           | int         | extract netmask length                                    | masklen('192.168.1.5/24')                           | 24              |
 |      ❌      | netmask(inet)           | inet        | construct netmask for network                             | netmask('192.168.1.5/24')                           | 255.255.255.0   |
 |      ❌      | network(inet)           | cidr        | extract network part of address                           | network('192.168.1.5/24')                           | 192.168.1.0/24  |
 |      ❌      | set_masklen(inet, int)  | inet        | set netmask length for inet value                         | set_masklen('192.168.1.5/24', 16)                   | 192.168.1.5/16  |
