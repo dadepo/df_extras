@@ -129,6 +129,9 @@ pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
+/// Sets the netmask length.
+/// If input is IP, The address part does not change.
+/// If the input is a CIDR, Address bits to the right of the new netmask are set to zero
 pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut result: Vec<String> = vec![];
     let cidr_strings = datafusion::common::cast::as_string_array(&args[0])?;
@@ -141,13 +144,28 @@ pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     }
 
     for i in 0..cidr_strings.len() {
-        let cidr_string = cidr_strings.value(i);
+        let input_string = cidr_strings.value(i);
         let prefix: u8 = prefix_lengths.value(i) as u8;
-        let cidr: IpNet = IpNet::from_str(cidr_string).map_err(|e| {
-            DataFusionError::Internal(format!("Parsing {cidr_string} failed with error {e}"))
-        })?;
 
-        match cidr.network() {
+        let is_cidr = input_string.contains('/');
+
+        let addr = if is_cidr {
+            IpNet::from_str(input_string)
+                .map_err(|e| {
+                    DataFusionError::Internal(format!(
+                        "Parsing {input_string} into CIDR failed with error {e}"
+                    ))
+                })?
+                .network()
+        } else {
+            IpAddr::from_str(input_string).map_err(|e| {
+                DataFusionError::Internal(format!(
+                    "Parsing {input_string} into IP address failed with error {e}"
+                ))
+            })?
+        };
+
+        match addr {
             IpAddr::V4(_) => {
                 if prefix > 32 {
                     return Err(DataFusionError::Internal(format!(
@@ -164,11 +182,15 @@ pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
             }
         };
 
-        let new_cidr = IpNet::new(cidr.network(), prefix).map_err(|e| {
+        let mut new_cidr = IpNet::new(addr, prefix).map_err(|e| {
             DataFusionError::Internal(format!(
-                "Creating CIDR from {cidr} and prefix {prefix} failed with error {e}"
+                "Creating CIDR from {addr} and prefix {prefix} failed with error {e}"
             ))
         })?;
+
+        if is_cidr {
+            new_cidr = new_cidr.trunc();
+        };
 
         result.push(new_cidr.to_string());
     }
@@ -189,7 +211,7 @@ mod tests {
     async fn test_broadcast() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_broadcast(ip) as broadcast from test")
+            .sql("select pg_broadcast(cidr) as broadcast from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -220,7 +242,9 @@ mod tests {
     #[tokio::test]
     async fn test_family() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx.sql("select pg_family(ip) as family from test").await?;
+        let df = ctx
+            .sql("select pg_family(cidr) as family from test")
+            .await?;
 
         let batches = df.clone().collect().await?;
 
@@ -251,7 +275,9 @@ mod tests {
     #[tokio::test]
     async fn test_host() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx.sql("select pg_host(ip) as broadcast from test").await?;
+        let df = ctx
+            .sql("select pg_host(cidr) as broadcast from test")
+            .await?;
 
         let batches = df.clone().collect().await?;
 
@@ -282,7 +308,7 @@ mod tests {
     async fn test_hostmask() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_hostmask(ip) as hostmask from test")
+            .sql("select pg_hostmask(cidr) as hostmask from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -314,7 +340,7 @@ mod tests {
     async fn test_masklen() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_masklen(ip) as masklen from test")
+            .sql("select pg_masklen(cidr) as masklen from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -347,7 +373,7 @@ mod tests {
     async fn test_netmask() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_netmask(ip) as netmask from test")
+            .sql("select pg_netmask(cidr) as netmask from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -380,7 +406,7 @@ mod tests {
     async fn test_network() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_network(ip) as network from test")
+            .sql("select pg_network(cidr) as network from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -410,10 +436,49 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_set_masklen() -> Result<()> {
+    async fn test_set_masklen_cidr() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(ip, 32) as network from test")
+            .sql("select pg_set_masklen(cidr, 16) as network from test")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        // "192.168.1.5/24" -> "192.168.0.0/16",
+        //  "172.16.0.0/20", -> "172.16.0.0/16"
+        //  "10.0.0.0/16", -> "10.0.0.0/16"
+        //  "2001:0db8::/32", -> "2001::/16"
+        //  "2001:db8:abcd::/48", -> "2001::/16"
+
+        let expected: Vec<&str> = r#"
++----------------+
+| network        |
++----------------+
+| 10.0.0.0/16    |
+| 172.16.0.0/16  |
+| 192.168.0.0/16 |
+| 2001::/16      |
+| 2001::/16      |
++----------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_set_masklen_ip() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_set_masklen(ip, 16) as network from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -422,11 +487,11 @@ mod tests {
 +--------------------+
 | network            |
 +--------------------+
-| 10.0.0.0/32        |
-| 172.16.0.0/32      |
-| 192.168.1.0/32     |
-| 2001:db8::/32      |
-| 2001:db8:abcd::/32 |
+| 10.0.0.0/16        |
+| 172.16.0.0/16      |
+| 192.168.1.5/16     |
+| 2001:db8::/16      |
+| 2001:db8:abcd::/16 |
 +--------------------+"#
             .split('\n')
             .filter_map(|input| {
@@ -446,7 +511,7 @@ mod tests {
     async fn test_set_masklen_invalid_ipv4_prefix() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(ip, 33) as network from test")
+            .sql("select pg_set_masklen(cidr, 33) as network from test")
             .await?;
 
         let result = df.clone().collect().await;
@@ -461,7 +526,7 @@ mod tests {
     async fn test_set_masklen_invalid_ipv6_prefix() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(ip, 129) as network from test")
+            .sql("select pg_set_masklen(cidr, 129) as network from test")
             .await?;
 
         let result = df.clone().collect().await;
@@ -474,18 +539,30 @@ mod tests {
 
     fn set_up_test_datafusion() -> Result<SessionContext> {
         // define a schema.
-        let schema = Arc::new(Schema::new(vec![Field::new("ip", DataType::Utf8, false)]));
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("cidr", DataType::Utf8, false),
+            Field::new("ip", DataType::Utf8, false),
+        ]));
 
         // define data.
         let batch = RecordBatch::try_new(
             schema,
-            vec![Arc::new(StringArray::from_iter_values([
-                "192.168.1.5/24",
-                "172.16.0.0/20",
-                "10.0.0.0/16",
-                "2001:0db8::/32",
-                "2001:db8:abcd::/48",
-            ]))],
+            vec![
+                Arc::new(StringArray::from_iter_values([
+                    "192.168.1.5/24",
+                    "172.16.0.0/20",
+                    "10.0.0.0/16",
+                    "2001:0db8::/32",
+                    "2001:db8:abcd::/48",
+                ])),
+                Arc::new(StringArray::from_iter_values([
+                    "192.168.1.5",
+                    "172.16.0.0",
+                    "10.0.0.0",
+                    "2001:0db8::",
+                    "2001:db8:abcd::",
+                ])),
+            ],
         )?;
 
         // declare a new context
