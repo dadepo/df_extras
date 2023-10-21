@@ -4,3 +4,7 @@ members = [
     "df_postgres",
 ]
 
+[workspace.dependencies]
+datafusion = "26.0.0"
+ipnet = "2.7.2"
+tokio = { version = "1.25.0", features = ["macros", "rt", "parking_lot"] }
