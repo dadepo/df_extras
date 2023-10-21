@@ -182,9 +182,8 @@ mod tests {
     use crate::register_udfs;
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
     use datafusion::arrow::record_batch::RecordBatch;
-    use datafusion::from_slice::FromSlice;
+    use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
-    use datafusion::{arrow, assert_batches_sorted_eq};
 
     #[tokio::test]
     async fn test_broadcast() -> Result<()> {
@@ -480,7 +479,7 @@ mod tests {
         // define data.
         let batch = RecordBatch::try_new(
             schema,
-            vec![Arc::new(StringArray::from_slice([
+            vec![Arc::new(StringArray::from_iter_values([
                 "192.168.1.5/24",
                 "172.16.0.0/20",
                 "10.0.0.0/16",
