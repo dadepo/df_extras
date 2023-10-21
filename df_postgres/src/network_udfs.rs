@@ -1,7 +1,8 @@
-use datafusion::arrow::array::{ArrayRef, StringArray, UInt8Array};
+use datafusion::arrow::array::{Array, ArrayRef, StringArray, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+use std::net::IpAddr;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -111,6 +112,7 @@ pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
+/// extract network part of address
 pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut result: Vec<String> = vec![];
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
@@ -123,6 +125,53 @@ pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
         result.push(network.to_string());
         Ok::<(), DataFusionError>(())
     })?;
+
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
+pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let cidr_strings = datafusion::common::cast::as_string_array(&args[0])?;
+    let prefix_lengths = datafusion::common::cast::as_int64_array(&args[1])?;
+
+    if cidr_strings.len() != prefix_lengths.len() {
+        return Err(DataFusionError::Internal(
+            "Cidr count do not match prefix length count".to_string(),
+        ));
+    }
+
+    for i in 0..cidr_strings.len() {
+        let cidr_string = cidr_strings.value(i);
+        let prefix: u8 = prefix_lengths.value(i) as u8;
+        let cidr: IpNet = IpNet::from_str(cidr_string).map_err(|e| {
+            DataFusionError::Internal(format!("Parsing {cidr_string} failed with error {e}"))
+        })?;
+
+        match cidr.network() {
+            IpAddr::V4(_) => {
+                if prefix > 32 {
+                    return Err(DataFusionError::Internal(format!(
+                        "ERROR:  invalid mask length: {prefix}"
+                    )));
+                }
+            }
+            IpAddr::V6(_) => {
+                if prefix > 128 {
+                    return Err(DataFusionError::Internal(format!(
+                        "ERROR:  invalid mask length: {prefix}"
+                    )));
+                }
+            }
+        };
+
+        let new_cidr = IpNet::new(cidr.network(), prefix).map_err(|e| {
+            DataFusionError::Internal(format!(
+                "Creating CIDR from {cidr} and prefix {prefix} failed with error {e}"
+            ))
+        })?;
+
+        result.push(new_cidr.to_string());
+    }
 
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
@@ -165,6 +214,37 @@ mod tests {
                 }
             })
             .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_family() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx.sql("select pg_family(ip) as family from test").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------+
+| family |
++--------+
+| 4      |
+| 4      |
+| 4      |
+| 6      |
+| 6      |
++--------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
         assert_batches_sorted_eq!(expected, &batches);
         Ok(())
     }
@@ -232,38 +312,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_family() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
-        let df = ctx.sql("select pg_family(ip) as family from test").await?;
-
-        let batches = df.clone().collect().await?;
-
-        let expected: Vec<&str> = r#"
-+--------+
-| family |
-+--------+
-| 4      |
-| 4      |
-| 4      |
-| 6      |
-| 6      |
-+--------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-
-        assert_batches_sorted_eq!(expected, &batches);
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn test_register_masklen() -> Result<()> {
+    async fn test_masklen() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
             .sql("select pg_masklen(ip) as masklen from test")
@@ -358,6 +407,69 @@ mod tests {
             .collect();
 
         assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_set_masklen() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_set_masklen(ip, 32) as network from test")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------------------+
+| network            |
++--------------------+
+| 10.0.0.0/32        |
+| 172.16.0.0/32      |
+| 192.168.1.0/32     |
+| 2001:db8::/32      |
+| 2001:db8:abcd::/32 |
++--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_set_masklen_invalid_ipv4_prefix() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_set_masklen(ip, 33) as network from test")
+            .await?;
+
+        let result = df.clone().collect().await;
+        assert!(
+            matches!(result, Err(DataFusionError::Internal(msg)) if msg == "ERROR:  invalid mask length: 33")
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_set_masklen_invalid_ipv6_prefix() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_set_masklen(ip, 129) as network from test")
+            .await?;
+
+        let result = df.clone().collect().await;
+        assert!(
+            matches!(result, Err(DataFusionError::Internal(msg)) if msg == "ERROR:  invalid mask length: 129")
+        );
+
         Ok(())
     }
 
