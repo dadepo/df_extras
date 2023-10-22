@@ -1,4 +1,4 @@
-use datafusion::arrow::array::{Array, ArrayRef, StringArray, UInt8Array};
+use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringArray, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
@@ -76,6 +76,44 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     })?;
 
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
+pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<bool> = vec![];
+    let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
+    let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
+
+    if first_inputs.len() != second_inputs.len() {
+        return Err(DataFusionError::Internal(
+            "First and second arguments are not of the same length".to_string(),
+        ));
+    }
+
+    first_inputs
+        .iter()
+        .flatten()
+        .zip(second_inputs.iter().flatten())
+        .try_for_each(|(first, second)| {
+            let first_ip = IpAddr::from_str(first)
+                .or_else(|_e| IpNet::from_str(first).map(|ip_net| ip_net.network()))
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                })?;
+
+            let second_ip = IpAddr::from_str(second)
+                .or_else(|_e| IpNet::from_str(second).map(|ip_net| ip_net.network()))
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
+                })?;
+
+            result.push(
+                first_ip.is_ipv4() && second_ip.is_ipv4()
+                    || first_ip.is_ipv6() && second_ip.is_ipv6(),
+            );
+            Ok::<(), DataFusionError>(())
+        })?;
+
+    Ok(Arc::new(BooleanArray::from(result)) as ArrayRef)
 }
 
 /// extract netmask length
@@ -333,6 +371,81 @@ mod tests {
             })
             .collect();
         assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_inet_same_family() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_inet_same_family('192.168.1.5/24', '::1') as same_family")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------------+
+| same_family |
++-------------+
+| false       |
++-------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx
+            .sql("select pg_inet_same_family('192.168.1.5/24', '192.168.1.5') as same_family")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------------+
+| same_family |
++-------------+
+| true        |
++-------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx
+            .sql("select pg_inet_same_family('2001:db8::ff00:42:8329/128', '::1') as same_family")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------------+
+| same_family |
++-------------+
+| true        |
++-------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
         Ok(())
     }
 
