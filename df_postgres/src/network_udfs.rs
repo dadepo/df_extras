@@ -2,7 +2,7 @@ use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringArray, UInt8
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -76,6 +76,122 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     })?;
 
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
+pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let mut result: Vec<String> = vec![];
+    let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
+    let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
+
+    if first_inputs.len() != second_inputs.len() {
+        return Err(DataFusionError::Internal(
+            "First and second arguments are not of the same length".to_string(),
+        ));
+    }
+
+    first_inputs
+        .iter()
+        .flatten()
+        .zip(second_inputs.iter().flatten())
+        .try_for_each(|(first, second)| {
+            let first_net = if !first.contains('/') {
+                IpNet::from(IpAddr::from_str(first).map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                })?)
+            } else {
+                IpNet::from_str(first).map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                })?
+            };
+
+            let second_net = if !second.contains('/') {
+                IpNet::from(IpAddr::from_str(first).map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                })?)
+            } else {
+                IpNet::from_str(second).map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
+                })?
+            };
+
+            let min_bit_mask = std::cmp::min(first_net.prefix_len(), second_net.prefix_len());
+
+            let merged = match (first_net, second_net) {
+                (IpNet::V4(first_ipv4_net), IpNet::V4(second_ipv4_net)) => {
+                    let first_addr_bit = first_ipv4_net.network().octets();
+                    let second_addr_bit = second_ipv4_net.network().octets();
+                    let common_bits =
+                        bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
+
+                    let first = Ipv4Net::new(Ipv4Addr::from(first_addr_bit), common_bits as u8)
+                        .map_err(|e| {
+                            DataFusionError::Internal(format!("Create IPv4 failed with error {e}"))
+                        })?
+                        .network();
+
+                    Ipv4Net::new(first, common_bits as u8)
+                        .map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Create IPv4Net failed with error {e}"
+                            ))
+                        })?
+                        .to_string()
+                }
+                (IpNet::V6(first_ipv6_net), IpNet::V6(second_ipv6_net)) => {
+                    let first_addr_bit = first_ipv6_net.network().octets();
+                    let second_addr_bit = second_ipv6_net.network().octets();
+                    let common_bits =
+                        bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
+
+                    let first = Ipv6Net::new(Ipv6Addr::from(first_addr_bit), common_bits as u8)
+                        .map_err(|e| {
+                            DataFusionError::Internal(format!("Create IPv6 failed with error {e}"))
+                        })?
+                        .network();
+
+                    Ipv6Net::new(first, common_bits as u8)
+                        .map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Create IPv6Net failed with error {e}"
+                            ))
+                        })?
+                        .to_string()
+                }
+                _ => {
+                    return Err(DataFusionError::Internal(
+                        "Cannot merge addresses from different families".to_string(),
+                    ))
+                }
+            };
+
+            result.push(merged);
+            Ok::<(), DataFusionError>(())
+        })?;
+
+    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
+fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
+    let mut byte = 0;
+    let mut n_bits = n % 8;
+
+    while byte < (n / 8) {
+        if l[byte] != r[byte] {
+            n_bits = 7;
+            break;
+        }
+        byte += 1;
+    }
+
+    if n_bits != 0 {
+        let diff = l[byte] ^ r[byte];
+
+        while (diff >> (8 - n_bits)) != 0 {
+            n_bits -= 1;
+        }
+    }
+
+    (8 * byte) + n_bits
 }
 
 pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -446,6 +562,59 @@ mod tests {
             .collect();
         assert_batches_sorted_eq!(expected, &batches);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_inet_merge() -> Result<()> {
+        let ctx = set_up_test_datafusion()?;
+        let df = ctx
+            .sql("select pg_inet_merge('192.168.1.5', '192.168.2.5/16') as col_result")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++----------------+
+| col_result     |
++----------------+
+| 192.168.0.0/16 |
++----------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx
+            .sql("select pg_inet_merge('2001:0db8:85a3:0000:0000:8a2e:0370:7334/64', '2001:0db8:85a3:0000:0000:8a2e:0370:8000/64') as col_result")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------------------+
+| col_result         |
++--------------------+
+| 2001:db8:85a3::/64 |
++--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
         Ok(())
     }
 

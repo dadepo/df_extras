@@ -7,7 +7,8 @@ use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
 use crate::network_udfs::{
-    broadcast, family, host, hostmask, inet_same_family, masklen, netmask, network, set_masklen,
+    broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
+    set_masklen,
 };
 
 mod network_udfs;
@@ -23,6 +24,7 @@ fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_host(ctx);
     register_hostmask(ctx);
     register_inet_same_family(ctx);
+    register_inet_merge(ctx);
     register_masklen(ctx);
     register_netmask(ctx);
     register_network(ctx);
@@ -93,6 +95,19 @@ fn register_inet_same_family(ctx: &SessionContext) {
     );
 
     ctx.register_udf(inet_same_family_udf);
+}
+
+fn register_inet_merge(ctx: &SessionContext) {
+    let inet_merge_udf = make_scalar_function(inet_merge);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
+    let inet_merge_udf = ScalarUDF::new(
+        "pg_inet_merge",
+        &Signature::uniform(2, vec![Utf8], Volatility::Immutable),
+        &return_type,
+        &inet_merge_udf,
+    );
+
+    ctx.register_udf(inet_merge_udf);
 }
 
 fn register_masklen(ctx: &SessionContext) {
