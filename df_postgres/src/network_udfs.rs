@@ -105,7 +105,7 @@ pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
             };
 
             let second_net = if !second.contains('/') {
-                IpNet::from(IpAddr::from_str(first).map_err(|e| {
+                IpNet::from(IpAddr::from_str(second).map_err(|e| {
                     DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
                 })?)
             } else {
@@ -186,7 +186,7 @@ fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
     if n_bits != 0 {
         let diff = l[byte] ^ r[byte];
 
-        while (diff >> (8 - n_bits)) != 0 {
+        while n_bits > 0 && (diff >> (8 - n_bits)) != 0 {
             n_bits -= 1;
         }
     }
@@ -604,6 +604,30 @@ mod tests {
 +--------------------+
 | 2001:db8:85a3::/64 |
 +--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx
+            .sql("select pg_inet_merge('2001:0db8:85a3:0000:0000:8a2e:0370:7334', '2001:0db8::1:0:0:1') as col_result")
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++---------------+
+| col_result    |
++---------------+
+| 2001:db8::/32 |
++---------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
