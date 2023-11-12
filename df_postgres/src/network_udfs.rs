@@ -172,29 +172,7 @@ pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
-fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
-    let mut byte = 0;
-    let mut n_bits = n % 8;
-
-    while byte < (n / 8) {
-        if l[byte] != r[byte] {
-            n_bits = 7;
-            break;
-        }
-        byte += 1;
-    }
-
-    if n_bits != 0 {
-        let diff = l[byte] ^ r[byte];
-
-        while n_bits > 0 && (diff >> (8 - n_bits)) != 0 {
-            n_bits -= 1;
-        }
-    }
-
-    (8 * byte) + n_bits
-}
-
+/// Checks if IP address are from the same family
 pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut result: Vec<bool> = vec![];
     let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
@@ -351,6 +329,29 @@ pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     }
 
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+}
+
+fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
+    let mut byte = 0;
+    let mut n_bits = n % 8;
+
+    while byte < (n / 8) {
+        if l[byte] != r[byte] {
+            n_bits = 7;
+            break;
+        }
+        byte += 1;
+    }
+
+    if n_bits != 0 {
+        let diff = l[byte] ^ r[byte];
+
+        while n_bits > 0 && (diff >> (8 - n_bits)) != 0 {
+            n_bits -= 1;
+        }
+    }
+
+    (8 * byte) + n_bits
 }
 
 #[cfg(test)]
