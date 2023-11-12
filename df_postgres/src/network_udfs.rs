@@ -354,6 +354,7 @@ fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
     (8 * byte) + n_bits
 }
 
+#[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -9,3 +9,6 @@ edition = "2021"
 datafusion =  { workspace = true }
 ipnet =  { workspace = true }
 tokio =  { workspace = true }
+
+[features]
+postgres = []

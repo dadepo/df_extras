@@ -1,3 +1,4 @@
+#![cfg(feature = "postgres")]
 use std::sync::Arc;
 
 use datafusion::arrow::datatypes::DataType::{Int64, UInt8, Utf8};
