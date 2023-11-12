@@ -78,6 +78,7 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(StringArray::from(result)) as ArrayRef)
 }
 
+/// Returns the smallest network which includes both of the given networks
 pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut result: Vec<String> = vec![];
     let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
