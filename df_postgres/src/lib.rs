@@ -59,7 +59,7 @@ fn register_broadcast(ctx: &SessionContext) {
     let broadcast_udf = make_scalar_function(broadcast);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let broadcast_udf = ScalarUDF::new(
-        "pg_broadcast",
+        "broadcast",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &broadcast_udf,
@@ -72,7 +72,7 @@ fn register_family(ctx: &SessionContext) {
     let family_udf = make_scalar_function(family);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(UInt8)));
     let family_udf = ScalarUDF::new(
-        "pg_family",
+        "family",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &family_udf,
@@ -85,7 +85,7 @@ fn register_host(ctx: &SessionContext) {
     let host_udf = make_scalar_function(host);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let host_udf = ScalarUDF::new(
-        "pg_host",
+        "host",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &host_udf,
@@ -98,7 +98,7 @@ fn register_hostmask(ctx: &SessionContext) {
     let hostmask_udf = make_scalar_function(hostmask);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let hostmask_udf = ScalarUDF::new(
-        "pg_hostmask",
+        "hostmask",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &hostmask_udf,
@@ -111,7 +111,7 @@ fn register_inet_same_family(ctx: &SessionContext) {
     let inet_same_family_udf = make_scalar_function(inet_same_family);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let inet_same_family_udf = ScalarUDF::new(
-        "pg_inet_same_family",
+        "inet_same_family",
         &Signature::uniform(2, vec![Utf8], Volatility::Immutable),
         &return_type,
         &inet_same_family_udf,
@@ -124,7 +124,7 @@ fn register_inet_merge(ctx: &SessionContext) {
     let inet_merge_udf = make_scalar_function(inet_merge);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let inet_merge_udf = ScalarUDF::new(
-        "pg_inet_merge",
+        "inet_merge",
         &Signature::uniform(2, vec![Utf8], Volatility::Immutable),
         &return_type,
         &inet_merge_udf,
@@ -137,7 +137,7 @@ fn register_masklen(ctx: &SessionContext) {
     let masklen_udf = make_scalar_function(masklen);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(UInt8)));
     let masklen_udf = ScalarUDF::new(
-        "pg_masklen",
+        "masklen",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &masklen_udf,
@@ -150,7 +150,7 @@ fn register_netmask(ctx: &SessionContext) {
     let netmask_udf = make_scalar_function(netmask);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let netmask_udf = ScalarUDF::new(
-        "pg_netmask",
+        "netmask",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &netmask_udf,
@@ -163,7 +163,7 @@ fn register_network(ctx: &SessionContext) {
     let network_udf = make_scalar_function(network);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let network_udf = ScalarUDF::new(
-        "pg_network",
+        "network",
         &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         &return_type,
         &network_udf,
@@ -176,7 +176,7 @@ fn register_set_masklen(ctx: &SessionContext) {
     let set_masklen_udf = make_scalar_function(set_masklen);
     let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
     let set_masklen_udf = ScalarUDF::new(
-        "pg_set_masklen",
+        "set_masklen",
         &Signature::exact(vec![Utf8, Int64], Volatility::Immutable),
         &return_type,
         &set_masklen_udf,

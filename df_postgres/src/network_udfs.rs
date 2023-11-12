@@ -368,7 +368,7 @@ mod tests {
     async fn test_broadcast() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_broadcast(cidr) as col_result from test")
+            .sql("select broadcast(cidr) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -400,7 +400,7 @@ mod tests {
     async fn test_family() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_family(cidr) as col_result from test")
+            .sql("select family(cidr) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -432,9 +432,7 @@ mod tests {
     #[tokio::test]
     async fn test_host() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx
-            .sql("select pg_host(cidr) as col_result from test")
-            .await?;
+        let df = ctx.sql("select host(cidr) as col_result from test").await?;
 
         let batches = df.clone().collect().await?;
 
@@ -465,7 +463,7 @@ mod tests {
     async fn test_hostmask() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_hostmask(cidr) as col_result from test")
+            .sql("select hostmask(cidr) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -497,7 +495,7 @@ mod tests {
     async fn test_inet_same_family() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_inet_same_family('192.168.1.5/24', '::1') as col_result")
+            .sql("select inet_same_family('192.168.1.5/24', '::1') as col_result")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -520,7 +518,7 @@ mod tests {
         assert_batches_sorted_eq!(expected, &batches);
 
         let df = ctx
-            .sql("select pg_inet_same_family('192.168.1.5/24', '192.168.1.5') as col_result")
+            .sql("select inet_same_family('192.168.1.5/24', '192.168.1.5') as col_result")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -543,7 +541,7 @@ mod tests {
         assert_batches_sorted_eq!(expected, &batches);
 
         let df = ctx
-            .sql("select pg_inet_same_family('2001:db8::ff00:42:8329/128', '::1') as col_result")
+            .sql("select inet_same_family('2001:db8::ff00:42:8329/128', '::1') as col_result")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -572,7 +570,7 @@ mod tests {
     async fn test_inet_merge() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_inet_merge('192.168.1.5', '192.168.2.5/16') as col_result")
+            .sql("select inet_merge('192.168.1.5', '192.168.2.5/16') as col_result")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -596,7 +594,7 @@ mod tests {
         assert_batches_sorted_eq!(expected, &batches);
 
         let df = ctx
-            .sql("select pg_inet_merge('2001:0db8:85a3:0000:0000:8a2e:0370:7334/64', '2001:0db8:85a3:0000:0000:8a2e:0370:8000/64') as col_result")
+            .sql("select inet_merge('2001:0db8:85a3:0000:0000:8a2e:0370:7334/64', '2001:0db8:85a3:0000:0000:8a2e:0370:8000/64') as col_result")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -620,7 +618,7 @@ mod tests {
         assert_batches_sorted_eq!(expected, &batches);
 
         let df = ctx
-            .sql("select pg_inet_merge('2001:0db8:85a3:0000:0000:8a2e:0370:7334', '2001:0db8::1:0:0:1') as col_result")
+            .sql("select inet_merge('2001:0db8:85a3:0000:0000:8a2e:0370:7334', '2001:0db8::1:0:0:1') as col_result")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -649,7 +647,7 @@ mod tests {
     async fn test_masklen() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_masklen(cidr) as col_result from test")
+            .sql("select masklen(cidr) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -682,7 +680,7 @@ mod tests {
     async fn test_netmask() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_netmask(cidr) as col_result from test")
+            .sql("select netmask(cidr) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -715,7 +713,7 @@ mod tests {
     async fn test_network() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_network(cidr) as col_result from test")
+            .sql("select network(cidr) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -748,16 +746,10 @@ mod tests {
     async fn test_set_masklen_cidr() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(cidr, 16) as col_result from test")
+            .sql("select set_masklen(cidr, 16) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
-
-        // "192.168.1.5/24" -> "192.168.0.0/16",
-        //  "172.16.0.0/20", -> "172.16.0.0/16"
-        //  "10.0.0.0/16", -> "10.0.0.0/16"
-        //  "2001:0db8::/32", -> "2001::/16"
-        //  "2001:db8:abcd::/48", -> "2001::/16"
 
         let expected: Vec<&str> = r#"
 +----------------+
@@ -787,7 +779,7 @@ mod tests {
     async fn test_set_masklen_ip() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(ip, 16) as col_result from test")
+            .sql("select set_masklen(ip, 16) as col_result from test")
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -820,7 +812,7 @@ mod tests {
     async fn test_set_masklen_invalid_ipv4_prefix() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(cidr, 33) as col_result from test")
+            .sql("select set_masklen(cidr, 33) as col_result from test")
             .await?;
 
         let result = df.clone().collect().await;
@@ -835,7 +827,7 @@ mod tests {
     async fn test_set_masklen_invalid_ipv6_prefix() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
         let df = ctx
-            .sql("select pg_set_masklen(cidr, 129) as col_result from test")
+            .sql("select set_masklen(cidr, 129) as col_result from test")
             .await?;
 
         let result = df.clone().collect().await;

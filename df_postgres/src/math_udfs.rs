@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use datafusion::arrow::array::{
-    Array, ArrayRef, Float64Array,
-};
+use datafusion::arrow::array::{Array, ArrayRef, Float64Array};
 use datafusion::error::Result;
 
 /// Nearest integer greater than or equal to argument (same as ceil).
@@ -31,9 +29,7 @@ mod tests {
     #[tokio::test]
     async fn test_ceiling() -> Result<()> {
         let ctx = set_up_test_datafusion()?;
-        let df = ctx
-            .sql("select ceiling(12.2) as col_result")
-            .await?;
+        let df = ctx.sql("select ceiling(12.2) as col_result").await?;
 
         let batches = df.clone().collect().await?;
 
