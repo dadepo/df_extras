@@ -1,14 +1,17 @@
-use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringArray, UInt8Array};
-use datafusion::common::DataFusionError;
-use datafusion::error::Result;
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::sync::Arc;
 
+use datafusion::arrow::array::{
+    Array, ArrayRef, BooleanArray, StringArray, StringBuilder, UInt8Array,
+};
+use datafusion::common::DataFusionError;
+use datafusion::error::Result;
+use ipnet::{IpNet, Ipv4Net, Ipv6Net};
+
 /// Gives the broadcast address for network.
 pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let broadcast_address = IpNet::from_str(ip_string)
@@ -16,16 +19,16 @@ pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
                 DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
             })?
             .broadcast();
-        result.push(broadcast_address.to_string());
+        string_builder.append_value(broadcast_address.to_string());
         Ok::<(), DataFusionError>(())
     })?;
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Gives the host address for network.
 pub fn host(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let host_address = IpNet::from_str(ip_string)
@@ -33,16 +36,16 @@ pub fn host(args: &[ArrayRef]) -> Result<ArrayRef> {
                 DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
             })?
             .network();
-        result.push(host_address.to_string());
+        string_builder.append_value(host_address.to_string());
         Ok::<(), DataFusionError>(())
     })?;
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Returns the address's family: 4 for IPv4, 6 for IPv6.
 pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<u8> = vec![];
+    let mut int8array = UInt8Array::builder(args[0].len());
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let family = if ip_string.parse::<Ipv4Net>().is_ok() {
@@ -55,15 +58,15 @@ pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
             )));
         };
 
-        result.push(family);
+        int8array.append_value(family);
         Ok::<(), DataFusionError>(())
     })?;
-    Ok(Arc::new(UInt8Array::from(result)) as ArrayRef)
+    Ok(Arc::new(int8array.finish()) as ArrayRef)
 }
 
 /// construct host mask for network
 pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let hostmask = IpNet::from_str(ip_string)
@@ -71,16 +74,16 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
                 DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
             })?
             .hostmask();
-        result.push(hostmask.to_string());
+        string_builder.append_value(hostmask.to_string());
         Ok::<(), DataFusionError>(())
     })?;
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Returns the smallest network which includes both of the given networks
 pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
     let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
 
@@ -165,16 +168,16 @@ pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
                 }
             };
 
-            result.push(merged);
+            string_builder.append_value(merged);
             Ok::<(), DataFusionError>(())
         })?;
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Checks if IP address are from the same family
 pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<bool> = vec![];
+    let mut boolean_array = BooleanArray::builder(args[0].len());
     let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
     let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
 
@@ -201,19 +204,19 @@ pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
                     DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
                 })?;
 
-            result.push(
+            boolean_array.append_value(
                 first_ip.is_ipv4() && second_ip.is_ipv4()
                     || first_ip.is_ipv6() && second_ip.is_ipv6(),
             );
             Ok::<(), DataFusionError>(())
         })?;
 
-    Ok(Arc::new(BooleanArray::from(result)) as ArrayRef)
+    Ok(Arc::new(boolean_array.finish()) as ArrayRef)
 }
 
 /// extract netmask length
 pub fn masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<u8> = vec![];
+    let mut int8array = UInt8Array::builder(args[0].len());
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let prefix_len = IpNet::from_str(ip_string)
@@ -221,16 +224,16 @@ pub fn masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
                 DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
             })?
             .prefix_len();
-        result.push(prefix_len);
+        int8array.append_value(prefix_len);
         Ok::<(), DataFusionError>(())
     })?;
 
-    Ok(Arc::new(UInt8Array::from(result)) as ArrayRef)
+    Ok(Arc::new(int8array.finish()) as ArrayRef)
 }
 
 /// construct netmask for network
 pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let netmask = IpNet::from_str(ip_string)
@@ -238,16 +241,16 @@ pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
                 DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
             })?
             .netmask();
-        result.push(netmask.to_string());
+        string_builder.append_value(netmask.to_string());
         Ok::<(), DataFusionError>(())
     })?;
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// extract network part of address
 pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().flatten().try_for_each(|ip_string| {
         let network = IpNet::from_str(ip_string)
@@ -255,18 +258,18 @@ pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
                 DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
             })?
             .network();
-        result.push(network.to_string());
+        string_builder.append_value(network.to_string());
         Ok::<(), DataFusionError>(())
     })?;
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Sets the netmask length.
 /// If input is IP, The address part does not change.
 /// If the input is a CIDR, Address bits to the right of the new netmask are set to zero
 pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut result: Vec<String> = vec![];
+    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let cidr_strings = datafusion::common::cast::as_string_array(&args[0])?;
     let prefix_lengths = datafusion::common::cast::as_int64_array(&args[1])?;
 
@@ -325,10 +328,10 @@ pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
             new_cidr = new_cidr.trunc();
         };
 
-        result.push(new_cidr.to_string());
+        string_builder.append_value(new_cidr.to_string());
     }
 
-    Ok(Arc::new(StringArray::from(result)) as ArrayRef)
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
@@ -357,12 +360,14 @@ fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::register_udfs;
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
     use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
+
+    use crate::register_udfs;
+
+    use super::*;
 
     #[tokio::test]
     async fn test_broadcast() -> Result<()> {
