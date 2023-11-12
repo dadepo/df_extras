@@ -16,4 +16,4 @@ https://www.postgresql.org/docs/16/functions-net.html
 |      ✔      | set_masklen(cidr, int)  | cidr        | set netmask length for cidr value                         | set_masklen('192.168.1.0/24'::cidr, 16)             | 192.168.0.0/16  |
 |      ❓      | text(inet)              | text        | extract IP address and netmask length as text             | text(inet '192.168.1.5')                            | 192.168.1.5/32  |
 |      ✔      | inet_same_family(inet, inet) | boolean | are the addresses from the same family?                   | inet_same_family('192.168.1.5/24', '::1')            | false           |
-|      ❌      | inet_merge(inet, inet)  | cidr        | the smallest network which includes both of the given networks | inet_merge('192.168.1.5/24', '192.168.2.5/24')    |
+|      ✔      | inet_merge(inet, inet)  | cidr        | the smallest network which includes both of the given networks | inet_merge('192.168.1.5/24', '192.168.2.5/24')    |
