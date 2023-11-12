@@ -1,22 +1,44 @@
 #![cfg(feature = "postgres")]
+
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType::{Int64, UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::{Float64, Int64, UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
+use crate::math_udfs::ceiling;
 use crate::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
     set_masklen,
 };
 
+mod math_udfs;
 mod network_udfs;
 
 pub fn register_udfs(ctx: &SessionContext) -> Result<()> {
     register_network_udfs(ctx)?;
+    register_math_udfs(ctx)?;
     Ok(())
+}
+
+fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
+    register_ceiling(ctx);
+    Ok(())
+}
+
+fn register_ceiling(ctx: &SessionContext) {
+    let ceiling_udf = make_scalar_function(ceiling);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
+    let ceiling_udf = ScalarUDF::new(
+        "ceiling",
+        &Signature::uniform(1, vec![Float64], Volatility::Immutable),
+        &return_type,
+        &ceiling_udf,
+    );
+
+    ctx.register_udf(ceiling_udf);
 }
 
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
