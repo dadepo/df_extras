@@ -8,7 +8,7 @@ use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatil
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
-use crate::math_udfs::ceiling;
+use crate::math_udfs::{ceiling, div};
 use crate::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
     set_masklen,
@@ -25,6 +25,7 @@ pub fn register_udfs(ctx: &SessionContext) -> Result<()> {
 
 fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     register_ceiling(ctx);
+    register_div(ctx);
     Ok(())
 }
 
@@ -39,6 +40,19 @@ fn register_ceiling(ctx: &SessionContext) {
     );
 
     ctx.register_udf(ceiling_udf);
+}
+
+fn register_div(ctx: &SessionContext) {
+    let udf = make_scalar_function(div);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Int64)));
+    let div_udf = ScalarUDF::new(
+        "div",
+        &Signature::uniform(2, vec![Float64], Volatility::Immutable),
+        &return_type,
+        &udf,
+    );
+
+    ctx.register_udf(div_udf);
 }
 
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {

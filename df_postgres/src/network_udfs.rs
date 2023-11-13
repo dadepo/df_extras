@@ -2,9 +2,7 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::str::FromStr;
 use std::sync::Arc;
 
-use datafusion::arrow::array::{
-    Array, ArrayRef, BooleanArray, StringArray, StringBuilder, UInt8Array,
-};
+use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringBuilder, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
@@ -360,6 +358,7 @@ fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
+    use datafusion::arrow::array::StringArray;
     use datafusion::arrow::datatypes::{DataType, Field, Schema};
     use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::assert_batches_sorted_eq;
