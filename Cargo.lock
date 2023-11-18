@@ -492,6 +492,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "datafusion",
+]
+
+[[package]]
 name = "const-random"
 version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -794,11 +801,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "df_postgres"
+name = "df_extras_postgres"
 version = "0.1.0"
 dependencies = [
+ "common",
  "datafusion",
  "ipnet",
+ "tokio",
+]
+
+[[package]]
+name = "df_extras_sqlite"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "datafusion",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
@@ -1765,16 +1784,31 @@ checksum = "e6b44e8fc93a14e66336d230954dda83d18b4605ccace8fe09bc7514a71ad0bc"
 
 [[package]]
 name = "serde"
-version = "1.0.164"
+version = "1.0.192"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e8c8cf938e98f769bc164923b06dce91cea1751522f46f8466461af04c9027d"
+checksum = "bca2a08484b285dcb282d0f67b26cadc0df8b19f8c12502c13d966bf9482f001"
+dependencies = [
+ "serde_derive",
+]
+
+[[package]]
+name = "serde_derive"
+version = "1.0.192"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6c7207fbec9faa48073f3e3074cbe553af6ea512d7c21ba46e434e70ea9fbc1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.38",
+]
 
 [[package]]
 name = "serde_json"
-version = "1.0.97"
+version = "1.0.108"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bdf3bf93142acad5821c99197022e170842cdbc1c30482b98750c688c640842a"
+checksum = "3d1c7e3eac408d115102c4c24ad393e0821bb3a5df4d506a80f85f7a742a526b"
 dependencies = [
+ "indexmap 2.0.2",
  "itoa",
  "ryu",
  "serde",

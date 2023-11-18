@@ -39,6 +39,7 @@ pub fn div(args: &[ArrayRef]) -> Result<ArrayRef> {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
+    use common::test_utils::set_up_test_datafusion;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
 
@@ -48,7 +49,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_ceiling() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx.sql("select ceiling(12.2) as col_result").await?;
 
         let batches = df.clone().collect().await?;
@@ -74,7 +75,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_div() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx.sql("select div(5, 2.0) as col_result").await?;
 
         let batches = df.clone().collect().await?;
@@ -98,8 +99,8 @@ mod tests {
         Ok(())
     }
 
-    fn set_up_test_datafusion() -> Result<SessionContext> {
-        let ctx = SessionContext::new();
+    fn register_udfs_for_test() -> Result<SessionContext> {
+        let ctx = set_up_test_datafusion()?;
         register_udfs(&ctx)?;
         Ok(ctx)
     }

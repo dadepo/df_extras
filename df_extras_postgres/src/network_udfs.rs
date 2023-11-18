@@ -8,78 +8,101 @@ use datafusion::error::Result;
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 
 /// Gives the broadcast address for network.
+/// Returns NULL for columns with NULL values.
 pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let broadcast_address = IpNet::from_str(ip_string)
-            .map_err(|e| {
-                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?
-            .broadcast();
-        string_builder.append_value(broadcast_address.to_string());
-        Ok::<(), DataFusionError>(())
+    ip_string.iter().try_for_each(|ip_string| {
+        if let Some(ip_string) = ip_string {
+            let broadcast_address = IpNet::from_str(ip_string)
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+                })?.broadcast();
+            string_builder.append_value(broadcast_address.to_string());
+            Ok::<(), DataFusionError>(())
+        } else {
+            string_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Gives the host address for network.
+/// Returns NULL for columns with NULL values.
 pub fn host(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let host_address = IpNet::from_str(ip_string)
+    ip_string.iter().try_for_each(|ip_string| {
+        if let Some(ip_string) = ip_string {
+            let host_address = IpNet::from_str(ip_string)
             .map_err(|e| {
-                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?
-            .network();
-        string_builder.append_value(host_address.to_string());
-        Ok::<(), DataFusionError>(())
+            DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+            })?.network();
+            string_builder.append_value(host_address.to_string());
+            Ok::<(), DataFusionError>(())
+        } else {
+            string_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
 /// Returns the address's family: 4 for IPv4, 6 for IPv6.
+/// Returns NULL for columns with NULL values.
 pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut int8array = UInt8Array::builder(args[0].len());
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let family = if ip_string.parse::<Ipv4Net>().is_ok() {
-            4
-        } else if ip_string.parse::<Ipv6Net>().is_ok() {
-            6
-        } else {
-            return Err(DataFusionError::Internal(format!(
-                "Could not parse {ip_string} to either IPv4 or IPv6"
-            )));
-        };
+    ip_string.iter().try_for_each(|ip_string| {
 
-        int8array.append_value(family);
-        Ok::<(), DataFusionError>(())
+        if let Some(ip_string) = ip_string {
+            let family = if ip_string.parse::<Ipv4Net>().is_ok() {
+                4
+            } else if ip_string.parse::<Ipv6Net>().is_ok() {
+                6
+            } else {
+                return Err(DataFusionError::Internal(format!(
+                    "Could not parse {ip_string} to either IPv4 or IPv6"
+                )));
+            };
+
+            int8array.append_value(family);
+            Ok::<(), DataFusionError>(())
+        } else {
+            int8array.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
     Ok(Arc::new(int8array.finish()) as ArrayRef)
 }
 
-/// construct host mask for network
+/// Constructs host mask for network.
+/// Returns NULL for columns with NULL values.
 pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let hostmask = IpNet::from_str(ip_string)
-            .map_err(|e| {
-                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?
-            .hostmask();
-        string_builder.append_value(hostmask.to_string());
-        Ok::<(), DataFusionError>(())
+    ip_string.iter().try_for_each(|ip_string| {
+        if let Some(ip_string) = ip_string {
+            let hostmask = IpNet::from_str(ip_string)
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+                })?.hostmask();
+            string_builder.append_value(hostmask.to_string());
+            Ok::<(), DataFusionError>(())
+        } else {
+            string_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
-/// Returns the smallest network which includes both of the given networks
+/// Returns the smallest network which includes both of the given networks.
+/// Returns NULL if any of the columns contain NULL values.
 pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
@@ -93,87 +116,92 @@ pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     first_inputs
         .iter()
-        .flatten()
-        .zip(second_inputs.iter().flatten())
+        .zip(second_inputs.iter())
         .try_for_each(|(first, second)| {
-            let first_net = if !first.contains('/') {
-                IpNet::from(IpAddr::from_str(first).map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                })?)
+            if let (Some(first), Some(second)) = (first, second) {
+                let first_net = if !first.contains('/') {
+                    IpNet::from(IpAddr::from_str(first).map_err(|e| {
+                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                    })?)
+                } else {
+                    IpNet::from_str(first).map_err(|e| {
+                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                    })?
+                };
+
+                let second_net = if !second.contains('/') {
+                    IpNet::from(IpAddr::from_str(second).map_err(|e| {
+                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                    })?)
+                } else {
+                    IpNet::from_str(second).map_err(|e| {
+                        DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
+                    })?
+                };
+
+                let min_bit_mask = std::cmp::min(first_net.prefix_len(), second_net.prefix_len());
+
+                let merged = match (first_net, second_net) {
+                    (IpNet::V4(first_ipv4_net), IpNet::V4(second_ipv4_net)) => {
+                        let first_addr_bit = first_ipv4_net.network().octets();
+                        let second_addr_bit = second_ipv4_net.network().octets();
+                        let common_bits =
+                            bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
+
+                        let first = Ipv4Net::new(Ipv4Addr::from(first_addr_bit), common_bits as u8)
+                            .map_err(|e| {
+                                DataFusionError::Internal(format!("Create IPv4 failed with error {e}"))
+                            })?
+                            .network();
+
+                        Ipv4Net::new(first, common_bits as u8)
+                            .map_err(|e| {
+                                DataFusionError::Internal(format!(
+                                    "Create IPv4Net failed with error {e}"
+                                ))
+                            })?
+                            .to_string()
+                    }
+                    (IpNet::V6(first_ipv6_net), IpNet::V6(second_ipv6_net)) => {
+                        let first_addr_bit = first_ipv6_net.network().octets();
+                        let second_addr_bit = second_ipv6_net.network().octets();
+                        let common_bits =
+                            bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
+
+                        let first = Ipv6Net::new(Ipv6Addr::from(first_addr_bit), common_bits as u8)
+                            .map_err(|e| {
+                                DataFusionError::Internal(format!("Create IPv6 failed with error {e}"))
+                            })?
+                            .network();
+
+                        Ipv6Net::new(first, common_bits as u8)
+                            .map_err(|e| {
+                                DataFusionError::Internal(format!(
+                                    "Create IPv6Net failed with error {e}"
+                                ))
+                            })?
+                            .to_string()
+                    }
+                    _ => {
+                        return Err(DataFusionError::Internal(
+                            "Cannot merge addresses from different families".to_string(),
+                        ))
+                    }
+                };
+
+                string_builder.append_value(merged);
+                Ok::<(), DataFusionError>(())
             } else {
-                IpNet::from_str(first).map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                })?
-            };
-
-            let second_net = if !second.contains('/') {
-                IpNet::from(IpAddr::from_str(second).map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                })?)
-            } else {
-                IpNet::from_str(second).map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
-                })?
-            };
-
-            let min_bit_mask = std::cmp::min(first_net.prefix_len(), second_net.prefix_len());
-
-            let merged = match (first_net, second_net) {
-                (IpNet::V4(first_ipv4_net), IpNet::V4(second_ipv4_net)) => {
-                    let first_addr_bit = first_ipv4_net.network().octets();
-                    let second_addr_bit = second_ipv4_net.network().octets();
-                    let common_bits =
-                        bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
-
-                    let first = Ipv4Net::new(Ipv4Addr::from(first_addr_bit), common_bits as u8)
-                        .map_err(|e| {
-                            DataFusionError::Internal(format!("Create IPv4 failed with error {e}"))
-                        })?
-                        .network();
-
-                    Ipv4Net::new(first, common_bits as u8)
-                        .map_err(|e| {
-                            DataFusionError::Internal(format!(
-                                "Create IPv4Net failed with error {e}"
-                            ))
-                        })?
-                        .to_string()
-                }
-                (IpNet::V6(first_ipv6_net), IpNet::V6(second_ipv6_net)) => {
-                    let first_addr_bit = first_ipv6_net.network().octets();
-                    let second_addr_bit = second_ipv6_net.network().octets();
-                    let common_bits =
-                        bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
-
-                    let first = Ipv6Net::new(Ipv6Addr::from(first_addr_bit), common_bits as u8)
-                        .map_err(|e| {
-                            DataFusionError::Internal(format!("Create IPv6 failed with error {e}"))
-                        })?
-                        .network();
-
-                    Ipv6Net::new(first, common_bits as u8)
-                        .map_err(|e| {
-                            DataFusionError::Internal(format!(
-                                "Create IPv6Net failed with error {e}"
-                            ))
-                        })?
-                        .to_string()
-                }
-                _ => {
-                    return Err(DataFusionError::Internal(
-                        "Cannot merge addresses from different families".to_string(),
-                    ))
-                }
-            };
-
-            string_builder.append_value(merged);
-            Ok::<(), DataFusionError>(())
+                string_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
         })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
-/// Checks if IP address are from the same family
+/// Checks if IP address are from the same family.
+/// Returns NULL if any of the columns contain NULL values.
 pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut boolean_array = BooleanArray::builder(args[0].len());
     let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
@@ -187,77 +215,98 @@ pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     first_inputs
         .iter()
-        .flatten()
-        .zip(second_inputs.iter().flatten())
+        .zip(second_inputs.iter())
         .try_for_each(|(first, second)| {
-            let first_ip = IpAddr::from_str(first)
-                .or_else(|_e| IpNet::from_str(first).map(|ip_net| ip_net.network()))
-                .map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                })?;
+            if let (Some(first), Some(second)) = (first, second) {
+                let first_ip = IpAddr::from_str(first)
+                    .or_else(|_e| IpNet::from_str(first).map(|ip_net| ip_net.network()))
+                    .map_err(|e| {
+                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
+                    })?;
 
-            let second_ip = IpAddr::from_str(second)
-                .or_else(|_e| IpNet::from_str(second).map(|ip_net| ip_net.network()))
-                .map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
-                })?;
+                let second_ip = IpAddr::from_str(second)
+                    .or_else(|_e| IpNet::from_str(second).map(|ip_net| ip_net.network()))
+                    .map_err(|e| {
+                        DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
+                    })?;
 
-            boolean_array.append_value(
-                first_ip.is_ipv4() && second_ip.is_ipv4()
-                    || first_ip.is_ipv6() && second_ip.is_ipv6(),
-            );
-            Ok::<(), DataFusionError>(())
+                boolean_array.append_value(
+                    first_ip.is_ipv4() && second_ip.is_ipv4()
+                        || first_ip.is_ipv6() && second_ip.is_ipv6(),
+                );
+                Ok::<(), DataFusionError>(())
+            } else {
+                boolean_array.append_null();
+                Ok::<(), DataFusionError>(())
+            }
         })?;
 
     Ok(Arc::new(boolean_array.finish()) as ArrayRef)
 }
 
-/// extract netmask length
+/// Extracts netmask length.
+/// Returns NULL for columns with NULL values.
 pub fn masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut int8array = UInt8Array::builder(args[0].len());
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let prefix_len = IpNet::from_str(ip_string)
-            .map_err(|e| {
-                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?
-            .prefix_len();
-        int8array.append_value(prefix_len);
-        Ok::<(), DataFusionError>(())
+    ip_string.iter().try_for_each(|ip_string| {
+        if let Some(ip_string) = ip_string {
+            let prefix_len = IpNet::from_str(ip_string)
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+                })?
+                .prefix_len();
+            int8array.append_value(prefix_len);
+            Ok::<(), DataFusionError>(())
+        } else {
+            int8array.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(int8array.finish()) as ArrayRef)
 }
 
-/// construct netmask for network
+/// Constructs netmask for network.
+/// Returns NULL for columns with NULL values.
 pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let netmask = IpNet::from_str(ip_string)
-            .map_err(|e| {
-                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?
-            .netmask();
-        string_builder.append_value(netmask.to_string());
-        Ok::<(), DataFusionError>(())
+    ip_string.iter().try_for_each(|ip_string| {
+        if let Some(ip_string) = ip_string {
+            let netmask = IpNet::from_str(ip_string)
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+                })?.netmask();
+            string_builder.append_value(netmask.to_string());
+            Ok::<(), DataFusionError>(())
+        } else {
+            string_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
-/// extract network part of address
+/// Extracts network part of address.
+/// Returns NULL for columns with NULL values.
 pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().flatten().try_for_each(|ip_string| {
-        let network = IpNet::from_str(ip_string)
-            .map_err(|e| {
-                DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?
-            .network();
-        string_builder.append_value(network.to_string());
-        Ok::<(), DataFusionError>(())
+    ip_string.iter().try_for_each(|ip_string| {
+        if let Some(ip_string) = ip_string {
+            let network = IpNet::from_str(ip_string)
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+                })?
+                .network();
+            string_builder.append_value(network.to_string());
+            Ok::<(), DataFusionError>(())
+        } else {
+            string_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
@@ -265,7 +314,8 @@ pub fn network(args: &[ArrayRef]) -> Result<ArrayRef> {
 
 /// Sets the netmask length.
 /// If input is IP, The address part does not change.
-/// If the input is a CIDR, Address bits to the right of the new netmask are set to zero
+/// If the input is a CIDR, Address bits to the right of the new netmask are set to zero.
+/// Returns NULL if any of the columns contain NULL values.
 pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
     let cidr_strings = datafusion::common::cast::as_string_array(&args[0])?;
@@ -280,6 +330,11 @@ pub fn set_masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
     for i in 0..cidr_strings.len() {
         let input_string = cidr_strings.value(i);
         let prefix: u8 = prefix_lengths.value(i) as u8;
+
+        if input_string.is_empty() || prefix == 0 {
+            string_builder.append_null();
+            continue;
+        }
 
         let is_cidr = input_string.contains('/');
 
@@ -358,11 +413,10 @@ fn bit_in_common(l: &[u8], r: &[u8], n: usize) -> usize {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
-    use datafusion::arrow::array::StringArray;
-    use datafusion::arrow::datatypes::{DataType, Field, Schema};
-    use datafusion::arrow::record_batch::RecordBatch;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
+
+    use common::test_utils::set_up_test_datafusion;
 
     use crate::register_udfs;
 
@@ -370,23 +424,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_broadcast() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select broadcast(cidr) as col_result from test")
+            .sql("select index, broadcast(cidr) as col_result from network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+----------------------------------------+
-| col_result                             |
-+----------------------------------------+
-| 192.168.1.255                          |
-| 172.16.15.255                          |
-| 10.0.255.255                           |
-| 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff |
-| 2001:db8:abcd:ffff:ffff:ffff:ffff:ffff |
-+----------------------------------------+"#
++-------+----------------------------------------+
+| index | col_result                             |
++-------+----------------------------------------+
+| 1     | 192.168.1.255                          |
+| 2     | 172.16.15.255                          |
+| 3     | 10.0.255.255                           |
+| 4     | 2001:db8:ffff:ffff:ffff:ffff:ffff:ffff |
+| 5     | 2001:db8:abcd:ffff:ffff:ffff:ffff:ffff |
+| 6     |                                        |
++-------+----------------------------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -402,23 +457,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_family() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select family(cidr) as col_result from test")
+            .sql("select index, family(cidr) as col_result from network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 4          |
-| 4          |
-| 4          |
-| 6          |
-| 6          |
-+------------+"#
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | 4          |
+| 2     | 4          |
+| 3     | 4          |
+| 4     | 6          |
+| 5     | 6          |
+| 6     |            |
++-------+------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -435,21 +491,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_host() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
-        let df = ctx.sql("select host(cidr) as col_result from test").await?;
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select index, host(cidr) as col_result from network_table ORDER BY index ASC").await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+-----------------+
-| col_result      |
-+-----------------+
-| 192.168.1.0     |
-| 172.16.0.0      |
-| 10.0.0.0        |
-| 2001:db8::      |
-| 2001:db8:abcd:: |
-+-----------------+"#
++-------+-----------------+
+| index | col_result      |
++-------+-----------------+
+| 1     | 192.168.1.0     |
+| 2     | 172.16.0.0      |
+| 3     | 10.0.0.0        |
+| 4     | 2001:db8::      |
+| 5     | 2001:db8:abcd:: |
+| 6     |                 |
++-------+-----------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -465,23 +522,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_hostmask() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select hostmask(cidr) as col_result from test")
+            .sql("select index, hostmask(cidr) as col_result from network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+---------------------------------+
-| col_result                      |
-+---------------------------------+
-| 0.0.0.255                       |
-| 0.0.15.255                      |
-| 0.0.255.255                     |
-| ::ffff:ffff:ffff:ffff:ffff:ffff |
-| ::ffff:ffff:ffff:ffff:ffff      |
-+---------------------------------+"#
++-------+---------------------------------+
+| index | col_result                      |
++-------+---------------------------------+
+| 1     | 0.0.0.255                       |
+| 2     | 0.0.15.255                      |
+| 3     | 0.0.255.255                     |
+| 4     | ::ffff:ffff:ffff:ffff:ffff:ffff |
+| 5     | ::ffff:ffff:ffff:ffff:ffff      |
+| 6     |                                 |
++-------+---------------------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -497,19 +555,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_inet_same_family() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select inet_same_family('192.168.1.5/24', '::1') as col_result")
+            .sql("select index, inet_same_family(cidr, '::1') as col_result FROM network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| false      |
-+------------+"#
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | false      |
+| 2     | false      |
+| 3     | false      |
+| 4     | true       |
+| 5     | true       |
+| 6     |            |
++-------+------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -572,7 +635,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_inet_merge() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
             .sql("select inet_merge('192.168.1.5', '192.168.2.5/16') as col_result")
             .await?;
@@ -649,23 +712,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_masklen() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select masklen(cidr) as col_result from test")
+            .sql("select index, masklen(cidr) as col_result from network_table order by index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 24         |
-| 20         |
-| 16         |
-| 32         |
-| 48         |
-+------------+"#
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | 24         |
+| 2     | 20         |
+| 3     | 16         |
+| 4     | 32         |
+| 5     | 48         |
+| 6     |            |
++-------+------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -682,23 +746,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_netmask() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select netmask(cidr) as col_result from test")
+            .sql("select index, netmask(cidr) as col_result from network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+------------------+
-| col_result       |
-+------------------+
-| 255.255.255.0    |
-| 255.255.240.0    |
-| 255.255.0.0      |
-| ffff:ffff::      |
-| ffff:ffff:ffff:: |
-+------------------+"#
++-------+------------------+
+| index | col_result       |
++-------+------------------+
+| 1     | 255.255.255.0    |
+| 2     | 255.255.240.0    |
+| 3     | 255.255.0.0      |
+| 4     | ffff:ffff::      |
+| 5     | ffff:ffff:ffff:: |
+| 6     |                  |
++-------+------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -715,23 +780,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_network() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select network(cidr) as col_result from test")
+            .sql("select index, network(cidr) as col_result from network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+-----------------+
-| col_result      |
-+-----------------+
-| 192.168.1.0     |
-| 172.16.0.0      |
-| 10.0.0.0        |
-| 2001:db8::      |
-| 2001:db8:abcd:: |
-+-----------------+"#
++-------+-----------------+
+| index | col_result      |
++-------+-----------------+
+| 1     | 192.168.1.0     |
+| 2     | 172.16.0.0      |
+| 3     | 10.0.0.0        |
+| 4     | 2001:db8::      |
+| 5     | 2001:db8:abcd:: |
+| 6     |                 |
++-------+-----------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -748,23 +814,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_masklen_cidr() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select set_masklen(cidr, 16) as col_result from test")
+            .sql("select index, set_masklen(cidr, 16) as col_result from network_table ORDER BY index ASC")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+----------------+
-| col_result     |
-+----------------+
-| 10.0.0.0/16    |
-| 172.16.0.0/16  |
-| 192.168.0.0/16 |
-| 2001::/16      |
-| 2001::/16      |
-+----------------+"#
++-------+----------------+
+| index | col_result     |
++-------+----------------+
+| 1     | 192.168.0.0/16 |
+| 2     | 172.16.0.0/16  |
+| 3     | 10.0.0.0/16    |
+| 4     | 2001::/16      |
+| 5     | 2001::/16      |
+| 6     |                |
++-------+----------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -781,23 +848,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_masklen_ip() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select set_masklen(ip, 16) as col_result from test")
+            .sql("select index, set_masklen(ip, 16) as col_result from network_table ORDER BY index desc")
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 10.0.0.0/16        |
-| 172.16.0.0/16      |
-| 192.168.1.5/16     |
-| 2001:db8::/16      |
-| 2001:db8:abcd::/16 |
-+--------------------+"#
++-------+--------------------+
+| index | col_result         |
++-------+--------------------+
+| 1     | 192.168.1.5/16     |
+| 2     | 172.16.0.0/16      |
+| 3     | 10.0.0.0/16        |
+| 4     | 2001:db8::/16      |
+| 5     | 2001:db8:abcd::/16 |
+| 6     |                    |
++-------+--------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -814,9 +882,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_masklen_invalid_ipv4_prefix() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select set_masklen(cidr, 33) as col_result from test")
+            .sql("select set_masklen(cidr, 33) as col_result from network_table")
             .await?;
 
         let result = df.clone().collect().await;
@@ -829,9 +897,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_set_masklen_invalid_ipv6_prefix() -> Result<()> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select set_masklen(cidr, 129) as col_result from test")
+            .sql("select set_masklen(cidr, 129) as col_result from network_table")
             .await?;
 
         let result = df.clone().collect().await;
@@ -842,39 +910,9 @@ mod tests {
         Ok(())
     }
 
-    fn set_up_test_datafusion() -> Result<SessionContext> {
-        // define a schema.
-        let schema = Arc::new(Schema::new(vec![
-            Field::new("cidr", DataType::Utf8, false),
-            Field::new("ip", DataType::Utf8, false),
-        ]));
-
-        // define data.
-        let batch = RecordBatch::try_new(
-            schema,
-            vec![
-                Arc::new(StringArray::from_iter_values([
-                    "192.168.1.5/24",
-                    "172.16.0.0/20",
-                    "10.0.0.0/16",
-                    "2001:0db8::/32",
-                    "2001:db8:abcd::/48",
-                ])),
-                Arc::new(StringArray::from_iter_values([
-                    "192.168.1.5",
-                    "172.16.0.0",
-                    "10.0.0.0",
-                    "2001:0db8::",
-                    "2001:db8:abcd::",
-                ])),
-            ],
-        )?;
-
-        // declare a new context
-        let ctx = SessionContext::new();
-        ctx.register_batch("test", batch)?;
+    fn register_udfs_for_test() -> Result<SessionContext> {
+        let ctx = set_up_test_datafusion()?;
         register_udfs(&ctx)?;
-        // declare a table in memory.
         Ok(ctx)
     }
 }

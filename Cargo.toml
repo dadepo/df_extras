@@ -1,10 +1,14 @@
 [workspace]
 
 members = [
-    "df_postgres",
+    "common",
+    "df_extras_postgres",
+    "df_extras_sqlite",
 ]
 
 [workspace.dependencies]
 datafusion = "32.0.0"
 ipnet = "2.7.2"
+serde = "1.0.192"
+serde_json = { version = "1.0.108", features = ["preserve_order"] }
 tokio = { version = "1.25.0", features = ["macros", "rt", "parking_lot"] }

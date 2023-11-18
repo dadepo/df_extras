@@ -4,4 +4,4 @@ A collection of user defined functions, from your favourite databases, in DataFu
 
 ## Crates
 
-[df_postgress](./df_postgres/README.md)
+[df_extras_postgres](./df_postgres/README.md)

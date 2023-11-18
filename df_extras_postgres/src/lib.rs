@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType::{Float64, Int64, UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::{Boolean, Float64, Int64, UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
@@ -123,7 +123,7 @@ fn register_hostmask(ctx: &SessionContext) {
 
 fn register_inet_same_family(ctx: &SessionContext) {
     let inet_same_family_udf = make_scalar_function(inet_same_family);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Boolean)));
     let inet_same_family_udf = ScalarUDF::new(
         "inet_same_family",
         &Signature::uniform(2, vec![Utf8], Volatility::Immutable),
