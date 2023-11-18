@@ -1,22 +1,28 @@
+use std::sync::Arc;
+
 use datafusion::arrow::array::{Array, ArrayRef, StringBuilder, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use serde_json::Value;
-use std::sync::Arc;
 
 pub fn json(args: &[ArrayRef]) -> Result<ArrayRef> {
     let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
 
     let mut string_builder = StringBuilder::with_capacity(json_strings.len(), u8::MAX as usize);
-    json_strings.iter().flatten().try_for_each(|json_string| {
-        let value: Value = serde_json::from_str(json_string).map_err(|e| {
-            DataFusionError::Internal(format!("Parsing {json_string} failed with error {e}"))
-        })?;
-        let pretty_json = serde_json::to_string(&value).map_err(|e| {
-            DataFusionError::Internal(format!("Parsing {json_string} failed with error {e}"))
-        })?;
-        string_builder.append_value(pretty_json);
-        Ok::<(), DataFusionError>(())
+    json_strings.iter().try_for_each(|json_string| {
+        if let Some(json_string) = json_string {
+            let value: Value = serde_json::from_str(json_string).map_err(|e| {
+                DataFusionError::Internal(format!("Parsing {json_string} failed with error {e}"))
+            })?;
+            let pretty_json = serde_json::to_string(&value).map_err(|e| {
+                DataFusionError::Internal(format!("Parsing {json_string} failed with error {e}"))
+            })?;
+            string_builder.append_value(pretty_json);
+            Ok::<(), DataFusionError>(())
+        } else {
+            string_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
     })?;
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
@@ -41,9 +47,10 @@ pub fn json_valid(args: &[ArrayRef]) -> Result<ArrayRef> {
 #[cfg(feature = "sqlite")]
 #[cfg(test)]
 mod tests {
-    use common::test_utils::set_up_test_datafusion;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
+
+    use common::test_utils::set_up_json_data_test;
 
     use crate::register_udfs;
 
@@ -53,17 +60,20 @@ mod tests {
     async fn test_json() -> Result<()> {
         let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql(r#"select json(' { "this" : "is", "a": [ "test" ] } ') as col_result"#)
+            .sql(
+                r#"select index, json(json_data) as col_result FROM json_table ORDER BY index ASC"#,
+            )
             .await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+----------------------------+
-| col_result                 |
-+----------------------------+
-| {"this":"is","a":["test"]} |
-+----------------------------+"#
++-------+----------------------------+
+| index | col_result                 |
++-------+----------------------------+
+| 1     | {"this":"is","a":["test"]} |
+| 2     |                            |
++-------+----------------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -80,16 +90,17 @@ mod tests {
     #[tokio::test]
     async fn test_json_valid() -> Result<()> {
         let ctx = register_udfs_for_test()?;
-        let df = ctx.sql(r#"select json_valid(null) as col_result"#).await?;
+        let df = ctx.sql(r#"select index, json_valid(json_data) as col_result FROM json_table ORDER BY index ASC"#).await?;
 
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-|            |
-+------------+"#
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | 1          |
+| 2     |            |
++-------+------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -104,7 +115,7 @@ mod tests {
     }
 
     fn register_udfs_for_test() -> Result<SessionContext> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = set_up_json_data_test()?;
         register_udfs(&ctx)?;
         Ok(ctx)
     }

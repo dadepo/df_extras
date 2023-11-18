@@ -5,7 +5,7 @@ use datafusion::error::Result;
 use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 
-pub fn set_up_test_datafusion() -> Result<SessionContext> {
+pub fn set_up_network_data_test() -> Result<SessionContext> {
     // define a schema.
     let schema = Arc::new(Schema::new(vec![
         Field::new("index", DataType::UInt8, false),
@@ -40,6 +40,35 @@ pub fn set_up_test_datafusion() -> Result<SessionContext> {
     // declare a new context
     let ctx = SessionContext::new();
     ctx.register_batch("network_table", batch)?;
+    // declare a table in memory.
+    Ok(ctx)
+}
+pub fn set_up_json_data_test() -> Result<SessionContext> {
+    // define a schema.
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("index", DataType::UInt8, false),
+        Field::new("json_data", DataType::Utf8, true),
+    ]));
+
+    // define data.
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(UInt8Array::from_iter_values([1, 2])),
+            Arc::new(StringArray::from(vec![
+                Some(r#" { "this" : "is", "a": [ "test" ] } "#),
+                // Some("172.16.0.0/20"),
+                // Some("10.0.0.0/16"),
+                // Some("2001:0db8::/32"),
+                // Some("2001:db8:abcd::/48"),
+                None,
+            ])),
+        ],
+    )?;
+
+    // declare a new context
+    let ctx = SessionContext::new();
+    ctx.register_batch("json_table", batch)?;
     // declare a table in memory.
     Ok(ctx)
 }

@@ -39,7 +39,7 @@ pub fn div(args: &[ArrayRef]) -> Result<ArrayRef> {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
-    use common::test_utils::set_up_test_datafusion;
+    use common::test_utils::set_up_network_data_test;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
 
@@ -100,7 +100,7 @@ mod tests {
     }
 
     fn register_udfs_for_test() -> Result<SessionContext> {
-        let ctx = set_up_test_datafusion()?;
+        let ctx = set_up_network_data_test()?;
         register_udfs(&ctx)?;
         Ok(ctx)
     }
