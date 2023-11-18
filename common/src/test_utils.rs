@@ -17,21 +17,14 @@ pub fn set_up_test_datafusion() -> Result<SessionContext> {
     let batch = RecordBatch::try_new(
         schema,
         vec![
-            Arc::new(UInt8Array::from_iter_values([
-                1,
-                2,
-                3,
-                4,
-                5,
-                6
-            ])),
+            Arc::new(UInt8Array::from_iter_values([1, 2, 3, 4, 5, 6])),
             Arc::new(StringArray::from(vec![
                 Some("192.168.1.5/24"),
                 Some("172.16.0.0/20"),
                 Some("10.0.0.0/16"),
                 Some("2001:0db8::/32"),
                 Some("2001:db8:abcd::/48"),
-                None
+                None,
             ])),
             Arc::new(StringArray::from(vec![
                 Some("192.168.1.5"),
@@ -39,7 +32,7 @@ pub fn set_up_test_datafusion() -> Result<SessionContext> {
                 Some("10.0.0.0"),
                 Some("2001:0db8::"),
                 Some("2001:db8:abcd::"),
-                None
+                None,
             ])),
         ],
     )?;

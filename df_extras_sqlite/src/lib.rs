@@ -3,7 +3,7 @@
 mod json_udfs;
 
 use crate::json_udfs::{json, json_valid};
-use datafusion::arrow::datatypes::DataType::{Boolean, UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::{UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;

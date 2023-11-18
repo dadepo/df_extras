@@ -17,7 +17,8 @@ pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
             let broadcast_address = IpNet::from_str(ip_string)
                 .map_err(|e| {
                     DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-                })?.broadcast();
+                })?
+                .broadcast();
             string_builder.append_value(broadcast_address.to_string());
             Ok::<(), DataFusionError>(())
         } else {
@@ -37,9 +38,10 @@ pub fn host(args: &[ArrayRef]) -> Result<ArrayRef> {
     ip_string.iter().try_for_each(|ip_string| {
         if let Some(ip_string) = ip_string {
             let host_address = IpNet::from_str(ip_string)
-            .map_err(|e| {
-            DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-            })?.network();
+                .map_err(|e| {
+                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
+                })?
+                .network();
             string_builder.append_value(host_address.to_string());
             Ok::<(), DataFusionError>(())
         } else {
@@ -57,7 +59,6 @@ pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
     let mut int8array = UInt8Array::builder(args[0].len());
     let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
     ip_string.iter().try_for_each(|ip_string| {
-
         if let Some(ip_string) = ip_string {
             let family = if ip_string.parse::<Ipv4Net>().is_ok() {
                 4
@@ -89,7 +90,8 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
             let hostmask = IpNet::from_str(ip_string)
                 .map_err(|e| {
                     DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-                })?.hostmask();
+                })?
+                .hostmask();
             string_builder.append_value(hostmask.to_string());
             Ok::<(), DataFusionError>(())
         } else {
@@ -150,7 +152,9 @@ pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
 
                         let first = Ipv4Net::new(Ipv4Addr::from(first_addr_bit), common_bits as u8)
                             .map_err(|e| {
-                                DataFusionError::Internal(format!("Create IPv4 failed with error {e}"))
+                                DataFusionError::Internal(format!(
+                                    "Create IPv4 failed with error {e}"
+                                ))
                             })?
                             .network();
 
@@ -170,7 +174,9 @@ pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
 
                         let first = Ipv6Net::new(Ipv6Addr::from(first_addr_bit), common_bits as u8)
                             .map_err(|e| {
-                                DataFusionError::Internal(format!("Create IPv6 failed with error {e}"))
+                                DataFusionError::Internal(format!(
+                                    "Create IPv6 failed with error {e}"
+                                ))
                             })?
                             .network();
 
@@ -277,7 +283,8 @@ pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
             let netmask = IpNet::from_str(ip_string)
                 .map_err(|e| {
                     DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-                })?.netmask();
+                })?
+                .netmask();
             string_builder.append_value(netmask.to_string());
             Ok::<(), DataFusionError>(())
         } else {
@@ -426,7 +433,9 @@ mod tests {
     async fn test_broadcast() -> Result<()> {
         let ctx = register_udfs_for_test()?;
         let df = ctx
-            .sql("select index, broadcast(cidr) as col_result from network_table ORDER BY index ASC")
+            .sql(
+                "select index, broadcast(cidr) as col_result from network_table ORDER BY index ASC",
+            )
             .await?;
 
         let batches = df.clone().collect().await?;
@@ -492,7 +501,9 @@ mod tests {
     #[tokio::test]
     async fn test_host() -> Result<()> {
         let ctx = register_udfs_for_test()?;
-        let df = ctx.sql("select index, host(cidr) as col_result from network_table ORDER BY index ASC").await?;
+        let df = ctx
+            .sql("select index, host(cidr) as col_result from network_table ORDER BY index ASC")
+            .await?;
 
         let batches = df.clone().collect().await?;
 

@@ -1,4 +1,4 @@
-use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringBuilder, UInt8Array};
+use datafusion::arrow::array::{Array, ArrayRef, StringBuilder, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use serde_json::Value;
@@ -80,9 +80,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_valid() -> Result<()> {
         let ctx = register_udfs_for_test()?;
-        let df = ctx
-            .sql(r#"select json_valid(null) as col_result"#)
-            .await?;
+        let df = ctx.sql(r#"select json_valid(null) as col_result"#).await?;
 
         let batches = df.clone().collect().await?;
 
