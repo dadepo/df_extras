@@ -1,6 +1,6 @@
 # df_exras
 
-A collection of user defined functions, from your favourite databases, in DataFusion.
+A collection of user defined functions, from your favourite databases, in [DataFusion](https://arrow.apache.org/datafusion/).
 
 ## Road to 0.0.1
 
