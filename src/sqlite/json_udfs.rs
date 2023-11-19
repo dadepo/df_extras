@@ -59,12 +59,10 @@ pub fn json_valid(args: &[ArrayRef]) -> Result<ArrayRef> {
 #[cfg(feature = "sqlite")]
 #[cfg(test)]
 mod tests {
+    use crate::common::test_utils::set_up_json_data_test;
+    use crate::sqlite::register_sqlite_udfs;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
-
-    use common::test_utils::set_up_json_data_test;
-
-    use crate::register_udfs;
 
     use super::*;
 
@@ -150,7 +148,7 @@ mod tests {
 
     fn register_udfs_for_test() -> Result<SessionContext> {
         let ctx = set_up_json_data_test()?;
-        register_udfs(&ctx)?;
+        register_sqlite_udfs(&ctx)?;
         Ok(ctx)
     }
 }

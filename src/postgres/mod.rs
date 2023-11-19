@@ -2,22 +2,21 @@
 
 use std::sync::Arc;
 
+use crate::postgres::math_udfs::{ceiling, div};
+use crate::postgres::network_udfs::{
+    broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
+    set_masklen,
+};
 use datafusion::arrow::datatypes::DataType::{Boolean, Float64, Int64, UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
-use crate::math_udfs::{ceiling, div};
-use crate::network_udfs::{
-    broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
-    set_masklen,
-};
-
 mod math_udfs;
 mod network_udfs;
 
-pub fn register_udfs(ctx: &SessionContext) -> Result<()> {
+pub fn register_postgres_udfs(ctx: &SessionContext) -> Result<()> {
     register_network_udfs(ctx)?;
     register_math_udfs(ctx)?;
     Ok(())

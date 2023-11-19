@@ -2,7 +2,7 @@
 
 mod json_udfs;
 
-use crate::json_udfs::{json, json_valid};
+use crate::sqlite::json_udfs::{json, json_valid};
 use datafusion::arrow::datatypes::DataType::{UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
@@ -10,7 +10,7 @@ use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 use std::sync::Arc;
 
-pub fn register_udfs(ctx: &SessionContext) -> Result<()> {
+pub fn register_sqlite_udfs(ctx: &SessionContext) -> Result<()> {
     register_json(ctx);
     register_json_valid(ctx);
     Ok(())
