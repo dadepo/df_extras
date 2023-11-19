@@ -20,7 +20,6 @@ Since `df_extras` is not published to crates.io yet, directly specify the git re
 as a dependency.
 
 ```toml
-// In Cargo.toml
 [dependencies]
 datafusion = "33.0.0"
 df_extras = { features = ["postgres"], git = "https://github.com/dadepo/df_extras" }
