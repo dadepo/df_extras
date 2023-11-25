@@ -4,10 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.75"
 datafusion = "33.0.0"
 ipnet = "2.7.2"
 serde = "1.0.192"
 serde_json = { version = "1.0.108", features = ["preserve_order"] }
+serde_json_path = "0.6.4"
 tokio = { version = "1.25.0", features = ["macros", "rt", "parking_lot"] }
 
 [features]

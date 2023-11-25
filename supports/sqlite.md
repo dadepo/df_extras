@@ -1,5 +1,7 @@
-### JSON Functions
-https://www.postgresql.org/docs/16/functions-net.html
+### SQLITE 
+
+### JSON 
+[Link](https://www.sqlite.org/json1.html)
 
 | Implemented | Function            | 
 |-------------|---------------------|

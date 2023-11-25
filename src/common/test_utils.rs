@@ -54,13 +54,15 @@ pub fn set_up_json_data_test() -> Result<SessionContext> {
     let batch = RecordBatch::try_new(
         schema,
         vec![
-            Arc::new(UInt8Array::from_iter_values([1, 2])),
+            Arc::new(UInt8Array::from_iter_values([1, 2, 3, 4, 5, 6, 7, 8])),
             Arc::new(StringArray::from(vec![
                 Some(r#" { "this" : "is", "a": [ "test" ] } "#),
-                // Some("172.16.0.0/20"),
-                // Some("10.0.0.0/16"),
-                // Some("2001:0db8::/32"),
-                // Some("2001:db8:abcd::/48"),
+                Some(r#"{"a":[2,3.5,true,false,null,"x"]}"#),
+                Some(r#"[ "one", "two" ]"#),
+                Some(r#"123"#),
+                Some(r#"12.3"#),
+                Some(r#"true"#),
+                Some(r#"false"#),
                 None,
             ])),
         ],
@@ -68,7 +70,26 @@ pub fn set_up_json_data_test() -> Result<SessionContext> {
 
     // declare a new context
     let ctx = SessionContext::new();
-    ctx.register_batch("json_table", batch)?;
     // declare a table in memory.
+    ctx.register_batch("json_table", batch)?;
+
+    // data for json_type
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("index", DataType::UInt8, false),
+        Field::new("json_data", DataType::Utf8, true),
+    ]));
+
+    // define data.
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(UInt8Array::from_iter_values([1])),
+            Arc::new(StringArray::from(vec![Some(
+                r#"{"a":[2,3.5,true,false,null,"x"]}"#,
+            )])),
+        ],
+    )?;
+
+    ctx.register_batch("json_path_table", batch)?;
     Ok(ctx)
 }

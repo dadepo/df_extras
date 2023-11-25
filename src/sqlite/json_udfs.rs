@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::common::{get_json_string_type, get_json_type, get_value_at_string};
 use datafusion::arrow::array::{Array, ArrayRef, StringBuilder, UInt8Array};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
@@ -27,6 +28,67 @@ pub fn json(args: &[ArrayRef]) -> Result<ArrayRef> {
             Ok::<(), DataFusionError>(())
         }
     })?;
+
+    Ok(Arc::new(string_builder.finish()) as ArrayRef)
+}
+
+/// The json_type(X) function returns the "type" of the outermost element of X. The json_type(X,P)
+/// function returns the "type" of the element in X that is selected by path P.
+/// The "type" returned by json_type() is one of the following SQL
+/// text values: 'null', 'true', 'false', 'integer', 'real', 'text', 'array', or 'object'.
+/// If the path P in json_type(X,P) selects an element that does not exist in X,
+/// then this function returns NULL.
+pub fn json_type(args: &[ArrayRef]) -> Result<ArrayRef> {
+    if args.is_empty() || args.len() > 2 {
+        return Err(DataFusionError::Internal(
+            "wrong number of arguments to function json_type()".to_string(),
+        ));
+    }
+
+    let mut string_builder = StringBuilder::with_capacity(args.len(), u8::MAX as usize);
+    if args.len() == 1 {
+        //1. Just json and no path
+        let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+        json_strings.iter().try_for_each(|json_string| {
+            if let Some(json_string) = json_string {
+                string_builder.append_value(
+                    get_json_string_type(json_string)
+                        .map_err(|err| DataFusionError::Internal(err.to_string()))?,
+                );
+                Ok::<(), DataFusionError>(())
+            } else {
+                string_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+    } else {
+        //2. Json and path
+        let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+        let paths = datafusion::common::cast::as_string_array(&args[1])?;
+
+        json_strings
+            .iter()
+            .zip(paths.iter())
+            .try_for_each(|(json_string, path)| {
+                if let (Some(json_string), Some(path)) = (json_string, path) {
+                    match get_value_at_string(json_string, path) {
+                        Ok(json_at_path) => {
+                            string_builder.append_value(
+                                get_json_type(&json_at_path)
+                                    .map_err(|err| DataFusionError::Internal(err.to_string()))?,
+                            );
+                        }
+                        Err(_) => {
+                            string_builder.append_null();
+                        }
+                    }
+                    Ok::<(), DataFusionError>(())
+                } else {
+                    string_builder.append_null();
+                    Ok::<(), DataFusionError>(())
+                }
+            })?;
+    }
 
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
@@ -78,12 +140,18 @@ mod tests {
         let batches = df.clone().collect().await?;
 
         let expected: Vec<&str> = r#"
-+-------+----------------------------+
-| index | col_result                 |
-+-------+----------------------------+
-| 1     | {"this":"is","a":["test"]} |
-| 2     |                            |
-+-------+----------------------------+"#
++-------+-----------------------------------+
+| index | col_result                        |
++-------+-----------------------------------+
+| 1     | {"this":"is","a":["test"]}        |
+| 2     | {"a":[2,3.5,true,false,null,"x"]} |
+| 3     | ["one","two"]                     |
+| 4     | 123                               |
+| 5     | 12.3                              |
+| 6     | true                              |
+| 7     | false                             |
+| 8     |                                   |
++-------+-----------------------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
@@ -131,7 +199,13 @@ mod tests {
 | index | col_result |
 +-------+------------+
 | 1     | 1          |
-| 2     |            |
+| 2     | 1          |
+| 3     | 1          |
+| 4     | 1          |
+| 5     | 1          |
+| 6     | 1          |
+| 7     | 1          |
+| 8     |            |
 +-------+------------+"#
             .split('\n')
             .filter_map(|input| {
@@ -143,6 +217,349 @@ mod tests {
             })
             .collect();
         assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_json_type() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data) as col_result FROM json_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | object     |
+| 2     | object     |
+| 3     | array      |
+| 4     | integer    |
+| 5     | real       |
+| 6     | true       |
+| 7     | false      |
+| 8     |            |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_json_type_with_path() -> Result<()> {
+        // Test cases
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}') → 'object'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$') → 'object'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a') → 'array'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[0]') → 'integer'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[1]') → 'real'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[2]') → 'true'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[3]') → 'false'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[4]') → 'null'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[5]') → 'text'
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[6]') → NULL
+
+        let ctx = register_udfs_for_test()?;
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$') → 'object'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | object     |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a') → 'array'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | array      |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[0]') → 'integer'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[0]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | integer    |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[1]') → 'real'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[1]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | real       |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[2]') → 'true'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[2]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | true       |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[3]') → 'false'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[3]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | false      |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[4]') → 'null'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[4]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | null       |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[5]') → 'text'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[3]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | false      |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[4]') → 'null'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[4]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | null       |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[5]') → 'text'
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[5]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     | text       |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        // json_type('{"a":[2,3.5,true,false,null,"x"]}','$.a[6]') → NULL
+        let df = ctx
+            .sql(
+                r#"select index, json_type(json_data, '$.a[6]') as col_result FROM json_path_table ORDER BY index ASC"#,
+            )
+            .await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------------+
+| index | col_result |
++-------+------------+
+| 1     |            |
++-------+------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
         Ok(())
     }
 
