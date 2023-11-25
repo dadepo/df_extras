@@ -16,5 +16,5 @@
 | 🚧︎         | json_remove         | 
 | 🚧︎︎        | json_replace        | 
 | 🚧︎         | json_set            | 
-| 🚧︎︎        | json_type           | 
+| ✅︎︎         | json_type           | 
 | 🚧︎︎        | json_quote          | 
