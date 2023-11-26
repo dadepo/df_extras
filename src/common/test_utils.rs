@@ -1,4 +1,4 @@
-use datafusion::arrow::array::{StringArray, UInt8Array};
+use datafusion::arrow::array::{Float64Array, Int64Array, StringArray, UInt64Array, UInt8Array};
 use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::error::Result;
@@ -43,6 +43,34 @@ pub fn set_up_network_data_test() -> Result<SessionContext> {
     // declare a table in memory.
     Ok(ctx)
 }
+
+pub fn set_up_maths_data_test() -> Result<SessionContext> {
+    // define a schema.
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("index", DataType::UInt8, false),
+        Field::new("uint", DataType::UInt64, true),
+        Field::new("int", DataType::Int64, true),
+        Field::new("float", DataType::Float64, true),
+    ]));
+
+    // define data.
+    let batch = RecordBatch::try_new(
+        schema,
+        vec![
+            Arc::new(UInt8Array::from_iter_values([1, 2, 3])),
+            Arc::new(UInt64Array::from(vec![Some(2), Some(3), None])),
+            Arc::new(Int64Array::from(vec![Some(-2), Some(3), None])),
+            Arc::new(Float64Array::from(vec![Some(1.0), Some(3.3), None])),
+        ],
+    )?;
+
+    // declare a new context
+    let ctx = SessionContext::new();
+    ctx.register_batch("maths_table", batch)?;
+    // declare a table in memory.
+    Ok(ctx)
+}
+
 pub fn set_up_json_data_test() -> Result<SessionContext> {
     // define a schema.
     let schema = Arc::new(Schema::new(vec![

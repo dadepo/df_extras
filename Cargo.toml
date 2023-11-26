@@ -7,6 +7,7 @@ edition = "2021"
 anyhow = "1.0.75"
 datafusion = "33.0.0"
 ipnet = "2.7.2"
+libm = "0.2.8"
 serde = "1.0.192"
 serde_json = { version = "1.0.108", features = ["preserve_order"] }
 serde_json_path = "0.6.4"
