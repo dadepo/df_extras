@@ -88,6 +88,57 @@ pub fn erf(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
 }
 
+/// Complementary error function
+pub fn erfc(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let column_data = &args[0];
+    let data = column_data.into_data();
+    let data_type = data.data_type();
+
+    let mut float64array_builder = Float64Array::builder(args[0].len());
+    match data_type {
+        DataType::Float64 => {
+            let values = datafusion::common::cast::as_float64_array(&args[0])?;
+            values.iter().try_for_each(|value| {
+                if let Some(value) = value {
+                    float64array_builder.append_value(libm::erfc(value))
+                } else {
+                    float64array_builder.append_null();
+                }
+                Ok::<(), DataFusionError>(())
+            })?;
+        }
+        DataType::Int64 => {
+            let values = datafusion::common::cast::as_int64_array(&args[0])?;
+            values.iter().try_for_each(|value| {
+                if let Some(value) = value {
+                    float64array_builder.append_value(libm::erfc(value as f64))
+                } else {
+                    float64array_builder.append_null();
+                }
+                Ok::<(), DataFusionError>(())
+            })?;
+        }
+        DataType::UInt64 => {
+            let values = datafusion::common::cast::as_uint64_array(&args[0])?;
+            values.iter().try_for_each(|value| {
+                if let Some(value) = value {
+                    float64array_builder.append_value(libm::erfc(value as f64))
+                } else {
+                    float64array_builder.append_null();
+                }
+                Ok::<(), DataFusionError>(())
+            })?;
+        }
+        t => {
+            return Err(DataFusionError::Internal(format!(
+                "Unsupported type {t} for erf function"
+            )))
+        }
+    };
+
+    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+}
+
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
@@ -165,6 +216,37 @@ mod tests {
 | 2     | 0.9999779095030014 | 0.9999779095030014  | 0.9999969422902035 |
 | 3     |                    |                     |                    |
 +-------+--------------------+---------------------+--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_erfc() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select index, uint as uint, int as int, float as float from maths_table ORDER BY index ASC").await?;
+        df.show().await?;
+
+        let df = ctx.sql("select index, erfc(uint) as uint, erfc(int) as int, erfc(float) as float from maths_table ORDER BY index ASC").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+-------------------------+-------------------------+----------------------+
+| index | uint                    | int                     | float                |
++-------+-------------------------+-------------------------+----------------------+
+| 1     | 0.004677734981047266    | 1.9953222650189528      | 0.15729920705028513  |
+| 2     | 0.000022090496998585438 | 0.000022090496998585438 | 3.057709796438165e-6 |
+| 3     |                         |                         |                      |
++-------+-------------------------+-------------------------+----------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
