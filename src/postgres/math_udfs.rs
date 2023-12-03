@@ -232,9 +232,6 @@ mod tests {
     #[tokio::test]
     async fn test_erfc() -> Result<()> {
         let ctx = register_udfs_for_test()?;
-        let df = ctx.sql("select index, uint as uint, int as int, float as float from maths_table ORDER BY index ASC").await?;
-        df.show().await?;
-
         let df = ctx.sql("select index, erfc(uint) as uint, erfc(int) as int, erfc(float) as float from maths_table ORDER BY index ASC").await?;
 
         let batches = df.clone().collect().await?;
