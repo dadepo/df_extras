@@ -21,6 +21,8 @@ pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
             if result.fract() < 0.9 {
                 float64array_builder.append_value(result);
             } else {
+                dbg!(&result);
+                dbg!(&result.round());
                 float64array_builder.append_value(result.round());
             }
             Ok::<(), DataFusionError>(())
