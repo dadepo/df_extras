@@ -19,11 +19,13 @@ pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
             }
             let result = value.acos().to_degrees();
             if result.fract() < 0.9 {
-                float64array_builder.append_value(result);
+                if result.fract() < 0.01 {
+                    float64array_builder.append_value(result.floor());
+                } else {
+                    float64array_builder.append_value(result);
+                }
             } else {
-                dbg!(&result);
-                dbg!(&result.round());
-                float64array_builder.append_value(result.round());
+                float64array_builder.append_value(result.ceil());
             }
             Ok::<(), DataFusionError>(())
         } else {
