@@ -37,28 +37,15 @@ pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
 }
 
-/// Inverse cosine, result in radians.
-pub fn acos(args: &[ArrayRef]) -> Result<ArrayRef> {
+/// Cosine, argument in degrees.
+pub fn cosd(args: &[ArrayRef]) -> Result<ArrayRef> {
     let values = datafusion::common::cast::as_float64_array(&args[0])?;
     let mut float64array_builder = Float64Array::builder(args[0].len());
 
     values.iter().try_for_each(|value| {
         if let Some(value) = value {
-            if value > 1.0 {
-                return Err(DataFusionError::Internal(
-                    "input is out of range".to_string(),
-                ));
-            }
-            let result = value.acos();
-            if result.fract() < 0.9 {
-                if result.fract() < 0.01 {
-                    float64array_builder.append_value(result.floor());
-                } else {
-                    float64array_builder.append_value(result);
-                }
-            } else {
-                float64array_builder.append_value(result.ceil());
-            }
+            let result = value.to_radians().cos();
+            float64array_builder.append_value(result);
             Ok::<(), DataFusionError>(())
         } else {
             float64array_builder.append_null();
@@ -271,9 +258,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_acos() -> Result<()> {
+    async fn test_cosd() -> Result<()> {
         let ctx = register_udfs_for_test()?;
-        let df = ctx.sql("select acos(0.5) as col_result").await?;
+        let df = ctx.sql("select cosd(60) as col_result").await?;
 
         let batches = df.clone().collect().await?;
 
@@ -281,7 +268,7 @@ mod tests {
 +--------------------+
 | col_result         |
 +--------------------+
-| 1.0471975511965976 |
+| 0.5000000000000001 |
 +--------------------+"#
             .split('\n')
             .filter_map(|input| {
@@ -294,7 +281,7 @@ mod tests {
             .collect();
         assert_batches_sorted_eq!(expected, &batches);
 
-        let df = ctx.sql("select acos(0.4) as col_result").await?;
+        let df = ctx.sql("select cosd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
 
@@ -302,7 +289,7 @@ mod tests {
 +--------------------+
 | col_result         |
 +--------------------+
-| 1.1592794807274085 |
+| 0.9999756307053947 |
 +--------------------+"#
             .split('\n')
             .filter_map(|input| {
@@ -314,15 +301,6 @@ mod tests {
             })
             .collect();
         assert_batches_sorted_eq!(expected, &batches);
-
-        let df = ctx.sql("select acos(1.4) as col_result").await?;
-
-        let result = df.clone().collect().await;
-        assert!(result
-            .err()
-            .unwrap()
-            .to_string()
-            .contains("input is out of range"));
 
         Ok(())
     }
