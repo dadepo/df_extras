@@ -5,7 +5,7 @@ use datafusion::arrow::datatypes::DataType;
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 
-/// Inverse cosine, result in radians.
+/// Inverse cosine, result in degrees.
 pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
     let values = datafusion::common::cast::as_float64_array(&args[0])?;
     let mut float64array_builder = Float64Array::builder(args[0].len());
@@ -18,6 +18,38 @@ pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
                 ));
             }
             let result = value.acos().to_degrees();
+            if result.fract() < 0.9 {
+                if result.fract() < 0.01 {
+                    float64array_builder.append_value(result.floor());
+                } else {
+                    float64array_builder.append_value(result);
+                }
+            } else {
+                float64array_builder.append_value(result.ceil());
+            }
+            Ok::<(), DataFusionError>(())
+        } else {
+            float64array_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
+    })?;
+
+    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+}
+
+/// Inverse cosine, result in radians.
+pub fn acos(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let values = datafusion::common::cast::as_float64_array(&args[0])?;
+    let mut float64array_builder = Float64Array::builder(args[0].len());
+
+    values.iter().try_for_each(|value| {
+        if let Some(value) = value {
+            if value > 1.0 {
+                return Err(DataFusionError::Internal(
+                    "input is out of range".to_string(),
+                ));
+            }
+            let result = value.acos();
             if result.fract() < 0.9 {
                 if result.fract() < 0.01 {
                     float64array_builder.append_value(result.floor());
@@ -227,6 +259,63 @@ mod tests {
         assert_batches_sorted_eq!(expected, &batches);
 
         let df = ctx.sql("select acosd(1.4) as col_result").await?;
+
+        let result = df.clone().collect().await;
+        assert!(result
+            .err()
+            .unwrap()
+            .to_string()
+            .contains("input is out of range"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_acos() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select acos(0.5) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------------------+
+| col_result         |
++--------------------+
+| 1.0471975511965976 |
++--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx.sql("select acos(0.4) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------------------+
+| col_result         |
++--------------------+
+| 1.1592794807274085 |
++--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx.sql("select acos(1.4) as col_result").await?;
 
         let result = df.clone().collect().await;
         assert!(result

@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::postgres::math_udfs::{acosd, ceiling, div, erf, erfc};
+use crate::postgres::math_udfs::{acos, acosd, ceiling, div, erf, erfc};
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
     set_masklen,
@@ -24,6 +24,7 @@ pub fn register_postgres_udfs(ctx: &SessionContext) -> Result<()> {
 
 fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     register_acosd(ctx);
+    register_acos(ctx);
     register_ceiling(ctx);
     register_erf(ctx);
     register_erfc(ctx);
@@ -42,6 +43,19 @@ fn register_acosd(ctx: &SessionContext) {
     );
 
     ctx.register_udf(acosd_udf);
+}
+
+fn register_acos(ctx: &SessionContext) {
+    let acos_udf = make_scalar_function(acos);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
+    let acos_udf = ScalarUDF::new(
+        "acos",
+        &Signature::uniform(1, vec![Float64], Volatility::Immutable),
+        &return_type,
+        &acos_udf,
+    );
+
+    ctx.register_udf(acos_udf);
 }
 
 fn register_ceiling(ctx: &SessionContext) {
