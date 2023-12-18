@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use crate::postgres::math_udfs::{cosd, acosd, ceiling, div, erf, erfc};
+use crate::postgres::math_udfs::{acosd, ceiling, cosd, div, erf, erfc};
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
     set_masklen,
