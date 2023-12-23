@@ -88,6 +88,25 @@ pub fn asind(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
 }
 
+/// Sine, argument in degrees.
+pub fn sind(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let values = datafusion::common::cast::as_float64_array(&args[0])?;
+    let mut float64array_builder = Float64Array::builder(args[0].len());
+
+    values.iter().try_for_each(|value| {
+        if let Some(value) = value {
+            let result = value.to_radians().sin();
+            float64array_builder.append_value(result);
+            Ok::<(), DataFusionError>(())
+        } else {
+            float64array_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
+    })?;
+
+    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+}
+
 /// Nearest integer greater than or equal to argument (same as ceil).
 pub fn ceiling(args: &[ArrayRef]) -> Result<ArrayRef> {
     let values = datafusion::common::cast::as_float64_array(&args[0])?;
@@ -338,7 +357,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sind() -> Result<()> {
+    async fn test_asind() -> Result<()> {
         let ctx = register_udfs_for_test()?;
         let df = ctx.sql("select asind(0.5) as col_result").await?;
 
@@ -371,6 +390,54 @@ mod tests {
 +--------------------+
 | 23.578178478201835 |
 +--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sind() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select sind(30) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++---------------------+
+| col_result          |
++---------------------+
+| 0.49999999999999994 |
++---------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx.sql("select sind(0.4) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-----------------------+
+| col_result            |
++-----------------------+
+| 0.0069812602979615525 |
++-----------------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
