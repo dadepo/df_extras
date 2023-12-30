@@ -107,6 +107,34 @@ pub fn sind(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
 }
 
+
+/// Inverse tangent, result in degrees.
+pub fn atand(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let values = datafusion::common::cast::as_float64_array(&args[0])?;
+    let mut float64array_builder = Float64Array::builder(args[0].len());
+
+    values.iter().try_for_each(|value| {
+        if let Some(value) = value {
+            let result = value.atan().to_degrees();
+            if result.fract() < 0.9 {
+                if result.fract() < 0.01 {
+                    float64array_builder.append_value(result.floor());
+                } else {
+                    float64array_builder.append_value(result);
+                }
+            } else {
+                float64array_builder.append_value(result.ceil());
+            }
+            Ok::<(), DataFusionError>(())
+        } else {
+            float64array_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
+    })?;
+
+    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+}
+
 /// Nearest integer greater than or equal to argument (same as ceil).
 pub fn ceiling(args: &[ArrayRef]) -> Result<ArrayRef> {
     let values = datafusion::common::cast::as_float64_array(&args[0])?;
@@ -438,6 +466,54 @@ mod tests {
 +-----------------------+
 | 0.0069812602979615525 |
 +-----------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_atand() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select atand(0.5) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------------------+
+| col_result         |
++--------------------+
+| 26.565051177077994 |
++--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx.sql("select atand(1) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++------------+
+| col_result |
++------------+
+| 45.0       |
++------------+"#
             .split('\n')
             .filter_map(|input| {
                 if input.is_empty() {
