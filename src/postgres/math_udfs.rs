@@ -56,6 +56,29 @@ pub fn cosd(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
 }
 
+/// Cotangent, argument in degrees.
+pub fn cotd(args: &[ArrayRef]) -> Result<ArrayRef> {
+    let values = datafusion::common::cast::as_float64_array(&args[0])?;
+    let mut float64array_builder = Float64Array::builder(args[0].len());
+
+    values.iter().try_for_each(|value| {
+        if let Some(value) = value {
+            let result = 1.0 / value.to_radians().tan();
+            if result.fract() < 0.01 {
+                float64array_builder.append_value(result.floor());
+            } else {
+                float64array_builder.append_value(result);
+            }
+            Ok::<(), DataFusionError>(())
+        } else {
+            float64array_builder.append_null();
+            Ok::<(), DataFusionError>(())
+        }
+    })?;
+
+    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+}
+
 /// Inverse sine, result in degrees.
 pub fn asind(args: &[ArrayRef]) -> Result<ArrayRef> {
     let values = datafusion::common::cast::as_float64_array(&args[0])?;
@@ -106,7 +129,6 @@ pub fn sind(args: &[ArrayRef]) -> Result<ArrayRef> {
 
     Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
 }
-
 
 /// Inverse tangent, result in degrees.
 pub fn atand(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -369,6 +391,54 @@ mod tests {
 | col_result         |
 +--------------------+
 | 0.9999756307053947 |
++--------------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_cotd() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select cotd(45) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++------------+
+| col_result |
++------------+
+| 1.0        |
++------------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx.sql("select cotd(0.4) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++--------------------+
+| col_result         |
++--------------------+
+| 143.23712166947507 |
 +--------------------+"#
             .split('\n')
             .filter_map(|input| {
