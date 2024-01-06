@@ -2,7 +2,9 @@
 
 use std::sync::Arc;
 
-use crate::postgres::math_udfs::{acosd, asind, atand, ceiling, cosd, cotd, div, erf, erfc, sind};
+use crate::postgres::math_udfs::{
+    acosd, asind, atand, ceiling, cosd, cotd, div, erf, erfc, sind, tand,
+};
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
     set_masklen,
@@ -29,6 +31,7 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     register_asind(ctx);
     register_sind(ctx);
     register_atand(ctx);
+    register_tand(ctx);
     register_ceiling(ctx);
     register_erf(ctx);
     register_erfc(ctx);
@@ -112,6 +115,19 @@ fn register_atand(ctx: &SessionContext) {
     );
 
     ctx.register_udf(atand_udf);
+}
+
+fn register_tand(ctx: &SessionContext) {
+    let tand_udf = make_scalar_function(tand);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
+    let tand_udf = ScalarUDF::new(
+        "tand",
+        &Signature::uniform(1, vec![Float64], Volatility::Immutable),
+        &return_type,
+        &tand_udf,
+    );
+
+    ctx.register_udf(tand_udf);
 }
 
 fn register_ceiling(ctx: &SessionContext) {
