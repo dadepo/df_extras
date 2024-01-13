@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use crate::postgres::math_udfs::{
-    acosd, asind, atand, ceiling, cosd, cotd, div, erf, erfc, sind, tand,
+    acosd, asind, atand, ceiling, cosd, cotd, div, erf, erfc, random_normal, sind, tand,
 };
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
@@ -11,9 +11,13 @@ use crate::postgres::network_udfs::{
 };
 use datafusion::arrow::datatypes::DataType::{Boolean, Float64, Int64, UInt64, UInt8, Utf8};
 use datafusion::error::Result;
-use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
+use datafusion::logical_expr::TypeSignature::Any;
+use datafusion::logical_expr::{
+    ReturnTypeFunction, ScalarUDF, Signature, TypeSignature, Volatility,
+};
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
+use TypeSignature::Variadic;
 
 mod math_udfs;
 mod network_udfs;
@@ -33,9 +37,10 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     register_atand(ctx);
     register_tand(ctx);
     register_ceiling(ctx);
+    register_div(ctx);
     register_erf(ctx);
     register_erfc(ctx);
-    register_div(ctx);
+    register_random_normal(ctx);
     Ok(())
 }
 
@@ -180,6 +185,19 @@ fn register_div(ctx: &SessionContext) {
     );
 
     ctx.register_udf(div_udf);
+}
+
+fn register_random_normal(ctx: &SessionContext) {
+    let udf = make_scalar_function(random_normal);
+    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
+    let random_normal_udf = ScalarUDF::new(
+        "random_normal",
+        &Signature::one_of(vec![Any(0), Variadic(vec![Float64])], Volatility::Immutable),
+        &return_type,
+        &udf,
+    );
+
+    ctx.register_udf(random_normal_udf);
 }
 
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {

@@ -4,6 +4,9 @@ use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int64Array};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
+use rand::distributions::Distribution;
+use rand::thread_rng;
+use rand_distr::Normal;
 
 /// Inverse cosine, result in degrees.
 pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -307,16 +310,123 @@ pub fn erfc(args: &[ArrayRef]) -> Result<ArrayRef> {
         }
     };
 
-    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+    let array = float64array_builder.finish();
+    Ok(Arc::new(array) as ArrayRef)
+}
+
+/// Returns a random value from the normal distribution with the given parameters;
+/// mean defaults to 0.0 and stddev defaults to 1.0.
+/// Example random_normal(0.0, 1.0) could return 0.051285419
+pub fn random_normal(args: &[ArrayRef]) -> Result<ArrayRef> {
+    if args.len() > 2_usize {
+        return Err(DataFusionError::Internal(
+            "No function matches the given name and argument types.".to_string(),
+        ));
+    }
+
+    let args = &args
+        .iter()
+        .filter(|arg| !matches!(arg.data_type(), &DataType::Null))
+        .cloned()
+        .collect::<Vec<ArrayRef>>()[..];
+
+    let means = args.first();
+    let std_devs = args.get(1);
+
+    let float64array = match (means, std_devs) {
+        (Some(means), Some(std_devs)) => {
+            let mut float64array_builder = Float64Array::builder(means.len());
+            let means = datafusion::common::cast::as_float64_array(means)?;
+            let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
+            means
+                .iter()
+                .zip(std_devs.iter())
+                .try_for_each(|(mean, std_dev)| {
+                    if let (Some(mean), Some(std_dev)) = (mean, std_dev) {
+                        let normal = Normal::new(mean, std_dev).map_err(|_| {
+                            DataFusionError::Internal(
+                                "Runtime error: Failed to create normal distribution".to_string(),
+                            )
+                        })?;
+                        let mut rng = thread_rng();
+                        let value = normal.sample(&mut rng);
+                        float64array_builder.append_value(value);
+                        Ok::<(), DataFusionError>(())
+                    } else {
+                        float64array_builder.append_null();
+                        Ok::<(), DataFusionError>(())
+                    }
+                })?;
+            float64array_builder.finish()
+        }
+        (Some(means), None) => {
+            let mut float64array_builder = Float64Array::builder(means.len());
+            let means = datafusion::common::cast::as_float64_array(means)?;
+            means.iter().try_for_each(|mean| {
+                if let Some(mean) = mean {
+                    let normal = Normal::new(mean, 1.0_f64).map_err(|_| {
+                        DataFusionError::Internal(
+                            "Runtime error: Failed to create normal distribution".to_string(),
+                        )
+                    })?;
+                    let mut rng = thread_rng();
+                    let value = normal.sample(&mut rng);
+                    float64array_builder.append_value(value);
+                    Ok::<(), DataFusionError>(())
+                } else {
+                    float64array_builder.append_null();
+                    Ok::<(), DataFusionError>(())
+                }
+            })?;
+            float64array_builder.finish()
+        }
+        (None, Some(std_devs)) => {
+            let mut float64array_builder = Float64Array::builder(std_devs.len());
+            let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
+
+            std_devs.iter().try_for_each(|std_dev| {
+                if let Some(std_dev) = std_dev {
+                    let normal = Normal::new(0.0_f64, std_dev).map_err(|_| {
+                        DataFusionError::Internal(
+                            "Runtime error: Failed to create normal distribution".to_string(),
+                        )
+                    })?;
+                    let mut rng = thread_rng();
+                    let value = normal.sample(&mut rng);
+                    float64array_builder.append_value(value);
+                    Ok::<(), DataFusionError>(())
+                } else {
+                    float64array_builder.append_null();
+                    Ok::<(), DataFusionError>(())
+                }
+            })?;
+            float64array_builder.finish()
+        }
+        (None, None) => {
+            let mut float64array_builder = Float64Array::builder(1);
+            let normal = Normal::new(0.0_f64, 1.0_f64).map_err(|_| {
+                DataFusionError::Internal(
+                    "Runtime error: Failed to create normal distribution".to_string(),
+                )
+            })?;
+            let mut rng = thread_rng();
+            let value = normal.sample(&mut rng);
+            float64array_builder.append_value(value);
+            float64array_builder.finish()
+        }
+    };
+
+    Ok(Arc::new(float64array) as ArrayRef)
 }
 
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
-    use crate::common::test_utils::set_up_maths_data_test;
-    use crate::postgres::register_postgres_udfs;
     use datafusion::assert_batches_sorted_eq;
     use datafusion::prelude::SessionContext;
+
+    use crate::common::test_utils::set_up_maths_data_test;
+    use crate::postgres::register_postgres_udfs;
 
     use super::*;
 
@@ -771,6 +881,26 @@ mod tests {
             })
             .collect();
         assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_random_normal() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+
+        let df = ctx
+            .sql(
+                r#"
+        select random_normal(index) as index,
+               random_normal(uint) as uint,
+               random_normal(int) as int,
+               random_normal(float) as float
+        from maths_table"#,
+            )
+            .await?;
+
+        df.clone().show().await?;
+        // No exception is ok.
         Ok(())
     }
 
