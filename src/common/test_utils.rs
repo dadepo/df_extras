@@ -99,7 +99,7 @@ pub fn set_up_json_data_test() -> Result<SessionContext> {
     // declare a new context
     let ctx = SessionContext::new();
     // declare a table in memory.
-    ctx.register_batch("json_table", batch)?;
+    ctx.register_batch("json_values_table", batch)?;
 
     // data for json_type
     let schema = Arc::new(Schema::new(vec![

@@ -133,7 +133,7 @@ mod tests {
         let ctx = register_udfs_for_test()?;
         let df = ctx
             .sql(
-                r#"select index, json(json_data) as col_result FROM json_table ORDER BY index ASC"#,
+                r#"select index, json(json_data) as col_result FROM json_values_table ORDER BY index ASC"#,
             )
             .await?;
 
@@ -170,7 +170,7 @@ mod tests {
         let ctx = register_udfs_for_test()?;
         let df = ctx
             .sql(
-                r#"select index, json(' { "this" : "is", "a": [ "test" ]  ') as col_result FROM json_table ORDER BY index ASC"#,
+                r#"select index, json(' { "this" : "is", "a": [ "test" ]  ') as col_result FROM json_values_table ORDER BY index ASC"#,
             )
             .await?;
 
@@ -190,7 +190,7 @@ mod tests {
     #[tokio::test]
     async fn test_json_valid() -> Result<()> {
         let ctx = register_udfs_for_test()?;
-        let df = ctx.sql(r#"select index, json_valid(json_data) as col_result FROM json_table ORDER BY index ASC"#).await?;
+        let df = ctx.sql(r#"select index, json_valid(json_data) as col_result FROM json_values_table ORDER BY index ASC"#).await?;
 
         let batches = df.clone().collect().await?;
 
@@ -225,7 +225,7 @@ mod tests {
         let ctx = register_udfs_for_test()?;
         let df = ctx
             .sql(
-                r#"select index, json_type(json_data) as col_result FROM json_table ORDER BY index ASC"#,
+                r#"select index, json_type(json_data) as col_result FROM json_values_table ORDER BY index ASC"#,
             )
             .await?;
 
