@@ -26,15 +26,7 @@ pub fn acosd(args: &[ArrayRef]) -> Result<ArrayRef> {
                 ));
             }
             let result = value.acos().to_degrees();
-            if result.fract() < 0.9 {
-                if result.fract() < 0.01 {
-                    float64array_builder.append_value(result.floor());
-                } else {
-                    float64array_builder.append_value(result);
-                }
-            } else {
-                float64array_builder.append_value(result.ceil());
-            }
+            float64array_builder.append_value(result);
             Ok::<(), DataFusionError>(())
         } else {
             float64array_builder.append_null();
@@ -72,11 +64,7 @@ pub fn cotd(args: &[ArrayRef]) -> Result<ArrayRef> {
     values.iter().try_for_each(|value| {
         if let Some(value) = value {
             let result = 1.0 / value.to_radians().tan();
-            if result.fract() < 0.01 {
-                float64array_builder.append_value(result.floor());
-            } else {
-                float64array_builder.append_value(result);
-            }
+            float64array_builder.append_value(result);
             Ok::<(), DataFusionError>(())
         } else {
             float64array_builder.append_null();
@@ -100,15 +88,7 @@ pub fn asind(args: &[ArrayRef]) -> Result<ArrayRef> {
                 ));
             }
             let result = value.asin().to_degrees();
-            if result.fract() < 0.9 {
-                if result.fract() < 0.01 {
-                    float64array_builder.append_value(result.floor());
-                } else {
-                    float64array_builder.append_value(result);
-                }
-            } else {
-                float64array_builder.append_value(result.ceil());
-            }
+            float64array_builder.append_value(result);
             Ok::<(), DataFusionError>(())
         } else {
             float64array_builder.append_null();
@@ -146,15 +126,7 @@ pub fn atand(args: &[ArrayRef]) -> Result<ArrayRef> {
     values.iter().try_for_each(|value| {
         if let Some(value) = value {
             let result = value.atan().to_degrees();
-            if result.fract() < 0.9 {
-                if result.fract() < 0.01 {
-                    float64array_builder.append_value(result.floor());
-                } else {
-                    float64array_builder.append_value(result);
-                }
-            } else {
-                float64array_builder.append_value(result.ceil());
-            }
+            float64array_builder.append_value(result);
             Ok::<(), DataFusionError>(())
         } else {
             float64array_builder.append_null();
@@ -469,9 +441,9 @@ impl ScalarUDFImpl for RandomNormal {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
-
+    use approx::ulps_eq;
     use datafusion::assert_batches_sorted_eq;
-    use datafusion::common::cast::as_float64_array;
+    use datafusion::common::cast::{as_float64_array, as_int64_array};
     use datafusion::prelude::SessionContext;
 
     use crate::common::test_utils::set_up_maths_data_test;
@@ -485,44 +457,24 @@ mod tests {
         let df = ctx.sql("select acosd(0.5) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 60.0       |
-+------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(result, 60.0_f64, epsilon = f64::EPSILON));
 
         let df = ctx.sql("select acosd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+-------------------+
-| col_result        |
-+-------------------+
-| 66.42182152179817 |
-+-------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            66.42182152179817_f64,
+            epsilon = f64::EPSILON
+        ));
 
         let df = ctx.sql("select acosd(1.4) as col_result").await?;
 
@@ -542,44 +494,28 @@ mod tests {
         let df = ctx.sql("select cosd(60) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 0.5000000000000001 |
-+--------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            0.5000000000000001_f64,
+            epsilon = f64::EPSILON
+        ));
 
         let df = ctx.sql("select cosd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 0.9999756307053947 |
-+--------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            0.9999756307053947_f64,
+            epsilon = f64::EPSILON
+        ));
 
         Ok(())
     }
@@ -590,44 +526,24 @@ mod tests {
         let df = ctx.sql("select cotd(45) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 1.0        |
-+------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(result, 1.0_f64, epsilon = f64::EPSILON));
 
         let df = ctx.sql("select cotd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 143.23712166947507 |
-+--------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            143.23712166947507_f64,
+            epsilon = f64::EPSILON
+        ));
 
         Ok(())
     }
@@ -639,43 +555,24 @@ mod tests {
 
         let batches = df.clone().collect().await?;
 
-        let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 30.0       |
-+------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
+
+        assert!(ulps_eq!(result, 30.0_f64, epsilon = f64::EPSILON));
 
         let df = ctx.sql("select asind(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 23.578178478201835 |
-+--------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            23.578178478201835_f64,
+            epsilon = f64::EPSILON
+        ));
 
         Ok(())
     }
@@ -686,44 +583,28 @@ mod tests {
         let df = ctx.sql("select sind(30) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+---------------------+
-| col_result          |
-+---------------------+
-| 0.49999999999999994 |
-+---------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            0.49999999999999994_f64,
+            epsilon = f64::EPSILON
+        ));
 
         let df = ctx.sql("select sind(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+-----------------------+
-| col_result            |
-+-----------------------+
-| 0.0069812602979615525 |
-+-----------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            0.0069812602979615525_f64,
+            epsilon = f64::EPSILON
+        ));
 
         Ok(())
     }
@@ -734,44 +615,24 @@ mod tests {
         let df = ctx.sql("select atand(0.5) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 26.565051177077994 |
-+--------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            26.565051177077994_f64,
+            epsilon = f64::EPSILON
+        ));
 
         let df = ctx.sql("select atand(1) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 45.0       |
-+------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(result, 45.0_f64, epsilon = f64::EPSILON));
 
         Ok(())
     }
@@ -782,44 +643,28 @@ mod tests {
         let df = ctx.sql("select tand(45) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+--------------------+
-| col_result         |
-+--------------------+
-| 0.9999999999999999 |
-+--------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            0.9999999999999999_f64,
+            epsilon = f64::EPSILON
+        ));
 
         let df = ctx.sql("select tand(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+----------------------+
-| col_result           |
-+----------------------+
-| 0.006981430430496479 |
-+----------------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(
+            result,
+            0.006981430430496479_f64,
+            epsilon = f64::EPSILON
+        ));
 
         Ok(())
     }
@@ -830,23 +675,12 @@ mod tests {
         let df = ctx.sql("select ceiling(12.2) as col_result").await?;
 
         let batches = df.clone().collect().await?;
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_float64_array(columns)?;
+        let result = result.value(0);
 
-        let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 13.0       |
-+------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        assert!(ulps_eq!(result, 13.0_f64, epsilon = f64::EPSILON));
+
         Ok(())
     }
 
@@ -857,22 +691,12 @@ mod tests {
 
         let batches = df.clone().collect().await?;
 
-        let expected: Vec<&str> = r#"
-+------------+
-| col_result |
-+------------+
-| 2          |
-+------------+"#
-            .split('\n')
-            .filter_map(|input| {
-                if input.is_empty() {
-                    None
-                } else {
-                    Some(input.trim())
-                }
-            })
-            .collect();
-        assert_batches_sorted_eq!(expected, &batches);
+        let columns = &batches.get(0).unwrap().column(0);
+        let result = as_int64_array(columns)?;
+        let result = result.value(0);
+
+        assert_eq!(result, 2_i64);
+
         Ok(())
     }
 

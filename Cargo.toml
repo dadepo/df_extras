@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
+approx = "0.5.1"
 datafusion  = { git = "https://github.com/apache/arrow-datafusion.git", branch = "main" }
 derivative = "2.2.0"
 ipnet = "2.7.2"
