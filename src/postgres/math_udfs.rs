@@ -1,17 +1,13 @@
 use std::sync::Arc;
 
-use datafusion::arrow::array::{
-    Array, ArrayRef, Float64Array, Int64Array,
-};
+use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int64Array};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::datatypes::DataType::Float64;
 
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use datafusion::logical_expr::TypeSignature::{Any, Variadic};
-use datafusion::logical_expr::{
-    ScalarUDFImpl, Signature, Volatility,
-};
+use datafusion::logical_expr::{ScalarUDFImpl, Signature, Volatility};
 use datafusion::physical_plan::ColumnarValue;
 use rand::distributions::Distribution;
 use rand::thread_rng;
@@ -323,7 +319,6 @@ pub fn erfc(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(array) as ArrayRef)
 }
 
-
 #[derive(Debug)]
 pub struct RandomNormal {
     signature: Signature,
@@ -370,7 +365,6 @@ impl ScalarUDFImpl for RandomNormal {
         let means = args.first();
         let std_devs = args.get(1);
 
-        
         match (means, std_devs) {
             (Some(ColumnarValue::Array(means)), Some(ColumnarValue::Array(std_devs))) => {
                 let mut float64array_builder = Float64Array::builder(means.len());
@@ -475,11 +469,10 @@ impl ScalarUDFImpl for RandomNormal {
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
-    
+
     use datafusion::assert_batches_sorted_eq;
     use datafusion::common::cast::as_float64_array;
     use datafusion::prelude::SessionContext;
-    
 
     use crate::common::test_utils::set_up_maths_data_test;
     use crate::postgres::register_postgres_udfs;
