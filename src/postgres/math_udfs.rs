@@ -1,9 +1,18 @@
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int64Array};
+use datafusion::arrow::array::{
+    Array, ArrayRef, Float64Array, Int64Array,
+};
 use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::DataType::Float64;
+
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
+use datafusion::logical_expr::TypeSignature::{Any, Variadic};
+use datafusion::logical_expr::{
+    ScalarUDFImpl, Signature, Volatility,
+};
+use datafusion::physical_plan::ColumnarValue;
 use rand::distributions::Distribution;
 use rand::thread_rng;
 use rand_distr::Normal;
@@ -317,33 +326,229 @@ pub fn erfc(args: &[ArrayRef]) -> Result<ArrayRef> {
 /// Returns a random value from the normal distribution with the given parameters;
 /// mean defaults to 0.0 and stddev defaults to 1.0.
 /// Example random_normal(0.0, 1.0) could return 0.051285419
-pub fn random_normal(args: &[ArrayRef]) -> Result<ArrayRef> {
-    if args.len() > 2_usize {
-        return Err(DataFusionError::Internal(
-            "No function matches the given name and argument types.".to_string(),
-        ));
+// pub fn random_normal(args: &[ArrayRef]) -> Result<ArrayRef> {
+//     if args.len() > 2_usize {
+//         return Err(DataFusionError::Internal(
+//             "No function matches the given name and argument types.".to_string(),
+//         ));
+//     }
+//
+//     let args = &args
+//         .iter()
+//         .filter(|arg| !matches!(arg.data_type(), &DataType::Null))
+//         .cloned()
+//         .collect::<Vec<ArrayRef>>()[..];
+//
+//     let means = args.first();
+//     let std_devs = args.get(1);
+//
+//     let float64array = match (means, std_devs) {
+//         (Some(means), Some(std_devs)) => {
+//             let mut float64array_builder = Float64Array::builder(means.len());
+//             let means = datafusion::common::cast::as_float64_array(means)?;
+//             let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
+//             means
+//                 .iter()
+//                 .zip(std_devs.iter())
+//                 .try_for_each(|(mean, std_dev)| {
+//                     if let (Some(mean), Some(std_dev)) = (mean, std_dev) {
+//                         let normal = Normal::new(mean, std_dev).map_err(|_| {
+//                             DataFusionError::Internal(
+//                                 "Runtime error: Failed to create normal distribution".to_string(),
+//                             )
+//                         })?;
+//                         let mut rng = thread_rng();
+//                         let value = normal.sample(&mut rng);
+//                         float64array_builder.append_value(value);
+//                         Ok::<(), DataFusionError>(())
+//                     } else {
+//                         float64array_builder.append_null();
+//                         Ok::<(), DataFusionError>(())
+//                     }
+//                 })?;
+//             float64array_builder.finish()
+//         }
+//         (Some(means), None) => {
+//             let mut float64array_builder = Float64Array::builder(means.len());
+//             let means = datafusion::common::cast::as_float64_array(means)?;
+//             means.iter().try_for_each(|mean| {
+//                 if let Some(mean) = mean {
+//                     let normal = Normal::new(mean, 1.0_f64).map_err(|_| {
+//                         DataFusionError::Internal(
+//                             "Runtime error: Failed to create normal distribution".to_string(),
+//                         )
+//                     })?;
+//                     let mut rng = thread_rng();
+//                     let value = normal.sample(&mut rng);
+//                     float64array_builder.append_value(value);
+//                     Ok::<(), DataFusionError>(())
+//                 } else {
+//                     float64array_builder.append_null();
+//                     Ok::<(), DataFusionError>(())
+//                 }
+//             })?;
+//             float64array_builder.finish()
+//         }
+//         (None, Some(std_devs)) => {
+//             let mut float64array_builder = Float64Array::builder(std_devs.len());
+//             let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
+//
+//             std_devs.iter().try_for_each(|std_dev| {
+//                 if let Some(std_dev) = std_dev {
+//                     let normal = Normal::new(0.0_f64, std_dev).map_err(|_| {
+//                         DataFusionError::Internal(
+//                             "Runtime error: Failed to create normal distribution".to_string(),
+//                         )
+//                     })?;
+//                     let mut rng = thread_rng();
+//                     let value = normal.sample(&mut rng);
+//                     float64array_builder.append_value(value);
+//                     Ok::<(), DataFusionError>(())
+//                 } else {
+//                     float64array_builder.append_null();
+//                     Ok::<(), DataFusionError>(())
+//                 }
+//             })?;
+//             float64array_builder.finish()
+//         }
+//         (None, None) => {
+//             let mut float64array_builder = Float64Array::builder(1);
+//             let normal = Normal::new(0.0_f64, 1.0_f64).map_err(|_| {
+//                 DataFusionError::Internal(
+//                     "Runtime error: Failed to create normal distribution".to_string(),
+//                 )
+//             })?;
+//             let mut rng = thread_rng();
+//             let value = normal.sample(&mut rng);
+//             float64array_builder.append_value(value);
+//             float64array_builder.finish()
+//         }
+//     };
+//
+//     Ok(Arc::new(float64array) as ArrayRef)
+// }
+
+#[derive(Debug)]
+pub struct RandomNormal {
+    signature: Signature,
+}
+
+impl RandomNormal {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::one_of(
+                vec![Any(0), Variadic(vec![Float64])],
+                Volatility::Volatile,
+            ),
+        }
+    }
+}
+
+impl ScalarUDFImpl for RandomNormal {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    let args = &args
-        .iter()
-        .filter(|arg| !matches!(arg.data_type(), &DataType::Null))
-        .cloned()
-        .collect::<Vec<ArrayRef>>()[..];
+    fn name(&self) -> &str {
+        "random_normal"
+    }
 
-    let means = args.first();
-    let std_devs = args.get(1);
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
 
-    let float64array = match (means, std_devs) {
-        (Some(means), Some(std_devs)) => {
-            let mut float64array_builder = Float64Array::builder(means.len());
-            let means = datafusion::common::cast::as_float64_array(means)?;
-            let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
-            means
-                .iter()
-                .zip(std_devs.iter())
-                .try_for_each(|(mean, std_dev)| {
-                    if let (Some(mean), Some(std_dev)) = (mean, std_dev) {
-                        let normal = Normal::new(mean, std_dev).map_err(|_| {
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Float64)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        if args.len() > 2_usize {
+            return Err(DataFusionError::Internal(
+                "No function matches the given name and argument types.".to_string(),
+            ));
+        }
+
+        let means = args.first();
+        let std_devs = args.get(1);
+
+        
+        match (means, std_devs) {
+            (Some(ColumnarValue::Array(means)), Some(ColumnarValue::Array(std_devs))) => {
+                let mut float64array_builder = Float64Array::builder(means.len());
+                let means = datafusion::common::cast::as_float64_array(means)?;
+                let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
+                means
+                    .iter()
+                    .zip(std_devs.iter())
+                    .try_for_each(|(mean, std_dev)| {
+                        if let (Some(mean), Some(std_dev)) = (mean, std_dev) {
+                            let normal = Normal::new(mean, std_dev).map_err(|_| {
+                                DataFusionError::Internal(
+                                    "Runtime error: Failed to create normal distribution"
+                                        .to_string(),
+                                )
+                            })?;
+                            let mut rng = thread_rng();
+                            let value = normal.sample(&mut rng);
+                            float64array_builder.append_value(value);
+                            Ok::<(), DataFusionError>(())
+                        } else {
+                            float64array_builder.append_null();
+                            Ok::<(), DataFusionError>(())
+                        }
+                    })?;
+                Ok(ColumnarValue::Array(
+                    Arc::new(float64array_builder.finish()) as ArrayRef,
+                ))
+            }
+            (Some(ColumnarValue::Array(means)), None) => {
+                let row_count = means.len();
+                let mut float64array_builder = Float64Array::builder(row_count);
+                // No arguments were passed to the function
+                if means.data_type() == &DataType::Null {
+                    // mean defaults to 0.0 and stddev defaults to 1.0
+                    let normal = Normal::new(0.0, 1.0).map_err(|_| {
+                        DataFusionError::Internal(
+                            "Runtime error: Failed to create normal distribution".to_string(),
+                        )
+                    })?;
+
+                    for _ in 0..row_count {
+                        let mut rng = thread_rng();
+                        let value = normal.sample(&mut rng);
+                        float64array_builder.append_value(value);
+                    }
+                } else {
+                    let means = datafusion::common::cast::as_float64_array(means)?;
+                    means.iter().try_for_each(|mean| {
+                        if let Some(mean) = mean {
+                            let normal = Normal::new(mean, 1.0_f64).map_err(|_| {
+                                DataFusionError::Internal(
+                                    "Runtime error: Failed to create normal distribution"
+                                        .to_string(),
+                                )
+                            })?;
+                            let mut rng = thread_rng();
+                            let value = normal.sample(&mut rng);
+                            float64array_builder.append_value(value);
+                            Ok::<(), DataFusionError>(())
+                        } else {
+                            float64array_builder.append_null();
+                            Ok::<(), DataFusionError>(())
+                        }
+                    })?;
+                }
+                Ok(ColumnarValue::Array(
+                    Arc::new(float64array_builder.finish()) as ArrayRef,
+                ))
+            }
+            (None, Some(ColumnarValue::Array(std_devs))) => {
+                let mut float64array_builder = Float64Array::builder(std_devs.len());
+                let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
+
+                std_devs.iter().try_for_each(|std_dev| {
+                    if let Some(std_dev) = std_dev {
+                        let normal = Normal::new(0.0_f64, std_dev).map_err(|_| {
                             DataFusionError::Internal(
                                 "Runtime error: Failed to create normal distribution".to_string(),
                             )
@@ -357,73 +562,25 @@ pub fn random_normal(args: &[ArrayRef]) -> Result<ArrayRef> {
                         Ok::<(), DataFusionError>(())
                     }
                 })?;
-            float64array_builder.finish()
+                Ok(ColumnarValue::Array(
+                    Arc::new(float64array_builder.finish()) as ArrayRef,
+                ))
+            }
+            _ => {
+                unimplemented!()
+            }
         }
-        (Some(means), None) => {
-            let mut float64array_builder = Float64Array::builder(means.len());
-            let means = datafusion::common::cast::as_float64_array(means)?;
-            means.iter().try_for_each(|mean| {
-                if let Some(mean) = mean {
-                    let normal = Normal::new(mean, 1.0_f64).map_err(|_| {
-                        DataFusionError::Internal(
-                            "Runtime error: Failed to create normal distribution".to_string(),
-                        )
-                    })?;
-                    let mut rng = thread_rng();
-                    let value = normal.sample(&mut rng);
-                    float64array_builder.append_value(value);
-                    Ok::<(), DataFusionError>(())
-                } else {
-                    float64array_builder.append_null();
-                    Ok::<(), DataFusionError>(())
-                }
-            })?;
-            float64array_builder.finish()
-        }
-        (None, Some(std_devs)) => {
-            let mut float64array_builder = Float64Array::builder(std_devs.len());
-            let std_devs = datafusion::common::cast::as_float64_array(std_devs)?;
-
-            std_devs.iter().try_for_each(|std_dev| {
-                if let Some(std_dev) = std_dev {
-                    let normal = Normal::new(0.0_f64, std_dev).map_err(|_| {
-                        DataFusionError::Internal(
-                            "Runtime error: Failed to create normal distribution".to_string(),
-                        )
-                    })?;
-                    let mut rng = thread_rng();
-                    let value = normal.sample(&mut rng);
-                    float64array_builder.append_value(value);
-                    Ok::<(), DataFusionError>(())
-                } else {
-                    float64array_builder.append_null();
-                    Ok::<(), DataFusionError>(())
-                }
-            })?;
-            float64array_builder.finish()
-        }
-        (None, None) => {
-            let mut float64array_builder = Float64Array::builder(1);
-            let normal = Normal::new(0.0_f64, 1.0_f64).map_err(|_| {
-                DataFusionError::Internal(
-                    "Runtime error: Failed to create normal distribution".to_string(),
-                )
-            })?;
-            let mut rng = thread_rng();
-            let value = normal.sample(&mut rng);
-            float64array_builder.append_value(value);
-            float64array_builder.finish()
-        }
-    };
-
-    Ok(Arc::new(float64array) as ArrayRef)
+    }
 }
 
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
+    
     use datafusion::assert_batches_sorted_eq;
+    use datafusion::common::cast::as_float64_array;
     use datafusion::prelude::SessionContext;
+    
 
     use crate::common::test_utils::set_up_maths_data_test;
     use crate::postgres::register_postgres_udfs;
@@ -888,19 +1045,124 @@ mod tests {
     async fn test_random_normal() -> Result<()> {
         let ctx = register_udfs_for_test()?;
 
-        let df = ctx
-            .sql(
-                r#"
-        select random_normal(index) as index,
-               random_normal(uint) as uint,
-               random_normal(int) as int,
-               random_normal(float) as float
-        from maths_table"#,
-            )
+        // +-------+------+-----+-------+
+        // | index | uint | int | float |
+        // +-------+------+-----+-------+
+        // | 1     | 2    | -2  | 1.0   |
+        // | 2     | 3    | 3   | 3.3   |
+        // | 3     |      |     |       |
+        // +-------+------+-----+-------+
+
+        fn has_duplicates(values: &[Option<f64>]) -> bool {
+            let len = values.len();
+            for i in 0..len {
+                for j in i + 1..len {
+                    if values[i] == values[j] {
+                        return true; // Duplicates found
+                    }
+                }
+            }
+            false // No duplicates found
+        }
+
+        // no mean and stddev
+        let binding = ctx
+            .sql(r#"select random_normal() from maths_table"#)
+            .await?
+            .collect()
             .await?;
 
-        df.clone().show().await?;
-        // No exception is ok.
+        let batch = binding
+            .first()
+            .expect("Batches to contain at least one item");
+        assert_eq!(batch.num_rows(), 3);
+        let values = as_float64_array(batch.column(0))?;
+        let mut vec_of_f64: Vec<Option<f64>> = vec![];
+        for value in values {
+            vec_of_f64.push(value)
+        }
+        assert!(!has_duplicates(&vec_of_f64[..]));
+
+        // mean as (nullable) uint and no stddev
+        let binding = ctx
+            .sql(r#"select random_normal(uint) from maths_table"#)
+            .await?
+            .collect()
+            .await?;
+
+        let batch = binding
+            .first()
+            .expect("Batches to contain at least one item");
+        assert_eq!(batch.num_rows(), 3);
+        let values = as_float64_array(batch.column(0))?;
+        let mut vec_of_f64: Vec<Option<f64>> = vec![];
+        for value in values {
+            vec_of_f64.push(value)
+        }
+        assert!(!has_duplicates(&vec_of_f64[..]));
+        // Last element should be None.
+        assert_eq!(vec_of_f64.last(), Some(&None));
+
+        // mean as (nullable) int and no stddev
+        let binding = ctx
+            .sql(r#"select random_normal(int) from maths_table"#)
+            .await?
+            .collect()
+            .await?;
+
+        let batch = binding
+            .first()
+            .expect("Batches to contain at least one item");
+        assert_eq!(batch.num_rows(), 3);
+        let values = as_float64_array(batch.column(0))?;
+        let mut vec_of_f64: Vec<Option<f64>> = vec![];
+        for value in values {
+            vec_of_f64.push(value)
+        }
+        assert!(!has_duplicates(&vec_of_f64[..]));
+        // Last element should be None.
+        assert_eq!(vec_of_f64.last(), Some(&None));
+
+        // mean as (nullable) float and no stddev
+        let binding = ctx
+            .sql(r#"select random_normal(float) from maths_table"#)
+            .await?
+            .collect()
+            .await?;
+
+        let batch = binding
+            .first()
+            .expect("Batches to contain at least one item");
+        assert_eq!(batch.num_rows(), 3);
+        let values = as_float64_array(batch.column(0))?;
+        let mut vec_of_f64: Vec<Option<f64>> = vec![];
+        for value in values {
+            vec_of_f64.push(value)
+        }
+        assert!(!has_duplicates(&vec_of_f64[..]));
+        // Last element should be None.
+        assert_eq!(vec_of_f64.last(), Some(&None));
+
+        // mean as (nullable) uint and stddev as nullable float
+        let binding = ctx
+            .sql(r#"select random_normal(uint, float) from maths_table"#)
+            .await?
+            .collect()
+            .await?;
+
+        let batch = binding
+            .first()
+            .expect("Batches to contain at least one item");
+        assert_eq!(batch.num_rows(), 3);
+        let values = as_float64_array(batch.column(0))?;
+        let mut vec_of_f64: Vec<Option<f64>> = vec![];
+        for value in values {
+            vec_of_f64.push(value)
+        }
+        assert!(!has_duplicates(&vec_of_f64[..]));
+        // Last element should be None.
+        assert_eq!(vec_of_f64.last(), Some(&None));
+
         Ok(())
     }
 

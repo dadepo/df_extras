@@ -1,4 +1,5 @@
 #![cfg(feature = "sqlite")]
+#![allow(deprecated)]
 
 mod json_udfs;
 
