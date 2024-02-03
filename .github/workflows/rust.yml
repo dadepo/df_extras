@@ -97,7 +97,7 @@ jobs:
           command: clippy
           args: --locked --all-features --workspace -- -D warnings
 
-  postgres_build:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -110,7 +110,5 @@ jobs:
           ~/.cargo/git/db/
           target/
         key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-    - name: Build
-      run: cargo build --verbose
     - name: Run tests
       run: cargo test --all-features --verbose
