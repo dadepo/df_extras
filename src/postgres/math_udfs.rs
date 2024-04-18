@@ -457,7 +457,7 @@ mod tests {
         let df = ctx.sql("select acosd(0.5) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -466,7 +466,7 @@ mod tests {
         let df = ctx.sql("select acosd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -494,7 +494,7 @@ mod tests {
         let df = ctx.sql("select cosd(60) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -507,7 +507,7 @@ mod tests {
         let df = ctx.sql("select cosd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -526,7 +526,7 @@ mod tests {
         let df = ctx.sql("select cotd(45) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -535,7 +535,7 @@ mod tests {
         let df = ctx.sql("select cotd(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -555,7 +555,7 @@ mod tests {
 
         let batches = df.clone().collect().await?;
 
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -564,7 +564,7 @@ mod tests {
         let df = ctx.sql("select asind(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -583,7 +583,7 @@ mod tests {
         let df = ctx.sql("select sind(30) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -596,7 +596,7 @@ mod tests {
         let df = ctx.sql("select sind(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -615,7 +615,7 @@ mod tests {
         let df = ctx.sql("select atand(0.5) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -628,7 +628,7 @@ mod tests {
         let df = ctx.sql("select atand(1) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -643,7 +643,7 @@ mod tests {
         let df = ctx.sql("select tand(45) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -656,7 +656,7 @@ mod tests {
         let df = ctx.sql("select tand(0.4) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -675,7 +675,7 @@ mod tests {
         let df = ctx.sql("select ceiling(12.2) as col_result").await?;
 
         let batches = df.clone().collect().await?;
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_float64_array(columns)?;
         let result = result.value(0);
 
@@ -691,7 +691,7 @@ mod tests {
 
         let batches = df.clone().collect().await?;
 
-        let columns = &batches.get(0).unwrap().column(0);
+        let columns = &batches.first().unwrap().column(0);
         let result = as_int64_array(columns)?;
         let result = result.value(0);
 

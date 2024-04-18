@@ -9,8 +9,7 @@ pub(crate) fn get_value_at(
 ) -> anyhow::Result<serde_json::Value> {
     let path = JsonPath::parse(path)?;
     path.query(&json)
-        .exactly_one()
-        .map(|json| json.clone())
+        .exactly_one().cloned()
         .map_err(|err| anyhow!(err))
 }
 
