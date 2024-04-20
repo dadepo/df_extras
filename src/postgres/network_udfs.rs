@@ -399,11 +399,11 @@ impl ScalarUDFImpl for Network {
 /// If the input is a CIDR, Address bits to the right of the new netmask are set to zero.
 /// Returns NULL if any of the columns contain NULL values.
 #[derive(Debug)]
-pub struct Masklen {
+pub struct SetMasklen {
     signature: Signature,
 }
 
-impl Masklen {
+impl SetMasklen {
     pub fn new() -> Self {
         Self {
             signature: Signature::exact(vec![Utf8, Int64], Volatility::Immutable),
@@ -411,7 +411,7 @@ impl Masklen {
     }
 }
 
-impl ScalarUDFImpl for Masklen {
+impl ScalarUDFImpl for SetMasklen {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
