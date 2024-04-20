@@ -13,7 +13,7 @@ use crate::postgres::math_udfs::{
     Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
 };
 use crate::postgres::network_udfs::{
-    broadcast, family, host, hostmask, inet_merge, inet_same_family, MaskLen, Netmask, Network,
+    broadcast, family, host, hostmask, inet_same_family, InetMerge, MaskLen, Netmask, Network,
     SetMaskLen,
 };
 
@@ -48,7 +48,7 @@ fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_host(ctx);
     register_hostmask(ctx);
     register_inet_same_family(ctx);
-    register_inet_merge(ctx);
+    ctx.register_udf(ScalarUDF::from(InetMerge::new()));
     ctx.register_udf(ScalarUDF::from(MaskLen::new()));
     ctx.register_udf(ScalarUDF::from(Netmask::new()));
     ctx.register_udf(ScalarUDF::from(Network::new()));
@@ -119,17 +119,4 @@ fn register_inet_same_family(ctx: &SessionContext) {
     );
 
     ctx.register_udf(inet_same_family_udf);
-}
-
-fn register_inet_merge(ctx: &SessionContext) {
-    let inet_merge_udf = make_scalar_function(inet_merge);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
-    let inet_merge_udf = ScalarUDF::new(
-        "inet_merge",
-        &Signature::uniform(2, vec![Utf8], Volatility::Immutable),
-        &return_type,
-        &inet_merge_udf,
-    );
-
-    ctx.register_udf(inet_merge_udf);
 }

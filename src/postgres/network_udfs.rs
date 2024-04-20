@@ -106,109 +106,6 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
-/// Returns the smallest network which includes both of the given networks.
-/// Returns NULL if any of the columns contain NULL values.
-pub fn inet_merge(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
-    let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
-    let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
-
-    if first_inputs.len() != second_inputs.len() {
-        return Err(DataFusionError::Internal(
-            "First and second arguments are not of the same length".to_string(),
-        ));
-    }
-
-    first_inputs
-        .iter()
-        .zip(second_inputs.iter())
-        .try_for_each(|(first, second)| {
-            if let (Some(first), Some(second)) = (first, second) {
-                let first_net = if !first.contains('/') {
-                    IpNet::from(IpAddr::from_str(first).map_err(|e| {
-                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                    })?)
-                } else {
-                    IpNet::from_str(first).map_err(|e| {
-                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                    })?
-                };
-
-                let second_net = if !second.contains('/') {
-                    IpNet::from(IpAddr::from_str(second).map_err(|e| {
-                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                    })?)
-                } else {
-                    IpNet::from_str(second).map_err(|e| {
-                        DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
-                    })?
-                };
-
-                let min_bit_mask = std::cmp::min(first_net.prefix_len(), second_net.prefix_len());
-
-                let merged = match (first_net, second_net) {
-                    (IpNet::V4(first_ipv4_net), IpNet::V4(second_ipv4_net)) => {
-                        let first_addr_bit = first_ipv4_net.network().octets();
-                        let second_addr_bit = second_ipv4_net.network().octets();
-                        let common_bits =
-                            bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
-
-                        let first = Ipv4Net::new(Ipv4Addr::from(first_addr_bit), common_bits as u8)
-                            .map_err(|e| {
-                                DataFusionError::Internal(format!(
-                                    "Create IPv4 failed with error {e}"
-                                ))
-                            })?
-                            .network();
-
-                        Ipv4Net::new(first, common_bits as u8)
-                            .map_err(|e| {
-                                DataFusionError::Internal(format!(
-                                    "Create IPv4Net failed with error {e}"
-                                ))
-                            })?
-                            .to_string()
-                    }
-                    (IpNet::V6(first_ipv6_net), IpNet::V6(second_ipv6_net)) => {
-                        let first_addr_bit = first_ipv6_net.network().octets();
-                        let second_addr_bit = second_ipv6_net.network().octets();
-                        let common_bits =
-                            bit_in_common(&first_addr_bit, &second_addr_bit, min_bit_mask as usize);
-
-                        let first = Ipv6Net::new(Ipv6Addr::from(first_addr_bit), common_bits as u8)
-                            .map_err(|e| {
-                                DataFusionError::Internal(format!(
-                                    "Create IPv6 failed with error {e}"
-                                ))
-                            })?
-                            .network();
-
-                        Ipv6Net::new(first, common_bits as u8)
-                            .map_err(|e| {
-                                DataFusionError::Internal(format!(
-                                    "Create IPv6Net failed with error {e}"
-                                ))
-                            })?
-                            .to_string()
-                    }
-                    _ => {
-                        return Err(DataFusionError::Internal(
-                            "Cannot merge addresses from different families".to_string(),
-                        ))
-                    }
-                };
-
-                string_builder.append_value(merged);
-                Ok::<(), DataFusionError>(())
-            } else {
-                string_builder.append_null();
-                Ok::<(), DataFusionError>(())
-            }
-        })?;
-
-    Ok(Arc::new(string_builder.finish()) as ArrayRef)
-}
-
 /// Checks if IP address are from the same family.
 /// Returns NULL if any of the columns contain NULL values.
 pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
@@ -251,6 +148,160 @@ pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
         })?;
 
     Ok(Arc::new(boolean_array.finish()) as ArrayRef)
+}
+
+/// Returns the smallest network which includes both of the given networks.
+/// Returns NULL if any of the columns contain NULL values.
+#[derive(Debug)]
+pub struct InetMerge {
+    signature: Signature,
+}
+
+impl InetMerge {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(2, vec![Utf8], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for InetMerge {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "inet_merge"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Utf8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
+        let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
+        let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
+
+        if first_inputs.len() != second_inputs.len() {
+            return Err(DataFusionError::Internal(
+                "First and second arguments are not of the same length".to_string(),
+            ));
+        }
+
+        first_inputs
+            .iter()
+            .zip(second_inputs.iter())
+            .try_for_each(|(first, second)| {
+                if let (Some(first), Some(second)) = (first, second) {
+                    let first_net = if !first.contains('/') {
+                        IpNet::from(IpAddr::from_str(first).map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Parsing {first} failed with error {e}"
+                            ))
+                        })?)
+                    } else {
+                        IpNet::from_str(first).map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Parsing {first} failed with error {e}"
+                            ))
+                        })?
+                    };
+
+                    let second_net = if !second.contains('/') {
+                        IpNet::from(IpAddr::from_str(second).map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Parsing {first} failed with error {e}"
+                            ))
+                        })?)
+                    } else {
+                        IpNet::from_str(second).map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Parsing {second} failed with error {e}"
+                            ))
+                        })?
+                    };
+
+                    let min_bit_mask =
+                        std::cmp::min(first_net.prefix_len(), second_net.prefix_len());
+
+                    let merged = match (first_net, second_net) {
+                        (IpNet::V4(first_ipv4_net), IpNet::V4(second_ipv4_net)) => {
+                            let first_addr_bit = first_ipv4_net.network().octets();
+                            let second_addr_bit = second_ipv4_net.network().octets();
+                            let common_bits = bit_in_common(
+                                &first_addr_bit,
+                                &second_addr_bit,
+                                min_bit_mask as usize,
+                            );
+
+                            let first =
+                                Ipv4Net::new(Ipv4Addr::from(first_addr_bit), common_bits as u8)
+                                    .map_err(|e| {
+                                        DataFusionError::Internal(format!(
+                                            "Create IPv4 failed with error {e}"
+                                        ))
+                                    })?
+                                    .network();
+
+                            Ipv4Net::new(first, common_bits as u8)
+                                .map_err(|e| {
+                                    DataFusionError::Internal(format!(
+                                        "Create IPv4Net failed with error {e}"
+                                    ))
+                                })?
+                                .to_string()
+                        }
+                        (IpNet::V6(first_ipv6_net), IpNet::V6(second_ipv6_net)) => {
+                            let first_addr_bit = first_ipv6_net.network().octets();
+                            let second_addr_bit = second_ipv6_net.network().octets();
+                            let common_bits = bit_in_common(
+                                &first_addr_bit,
+                                &second_addr_bit,
+                                min_bit_mask as usize,
+                            );
+
+                            let first =
+                                Ipv6Net::new(Ipv6Addr::from(first_addr_bit), common_bits as u8)
+                                    .map_err(|e| {
+                                        DataFusionError::Internal(format!(
+                                            "Create IPv6 failed with error {e}"
+                                        ))
+                                    })?
+                                    .network();
+
+                            Ipv6Net::new(first, common_bits as u8)
+                                .map_err(|e| {
+                                    DataFusionError::Internal(format!(
+                                        "Create IPv6Net failed with error {e}"
+                                    ))
+                                })?
+                                .to_string()
+                        }
+                        _ => {
+                            return Err(DataFusionError::Internal(
+                                "Cannot merge addresses from different families".to_string(),
+                            ))
+                        }
+                    };
+
+                    string_builder.append_value(merged);
+                    Ok::<(), DataFusionError>(())
+                } else {
+                    string_builder.append_null();
+                    Ok::<(), DataFusionError>(())
+                }
+            })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(string_builder.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// Extracts netmask length.
