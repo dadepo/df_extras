@@ -12,25 +12,61 @@ use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 
 /// Gives the broadcast address for the network.
 /// Returns NULL for columns with NULL values.
-pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
-    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().try_for_each(|ip_string| {
-        if let Some(ip_string) = ip_string {
-            let broadcast_address = IpNet::from_str(ip_string)
-                .map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-                })?
-                .broadcast();
-            string_builder.append_value(broadcast_address.to_string());
-            Ok::<(), DataFusionError>(())
-        } else {
-            string_builder.append_null();
-            Ok::<(), DataFusionError>(())
-        }
-    })?;
+#[derive(Debug)]
+pub struct Broadcast {
+    signature: Signature,
+}
 
-    Ok(Arc::new(string_builder.finish()) as ArrayRef)
+impl Broadcast {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Utf8], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for Broadcast {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "broadcast"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Utf8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
+        let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+        ip_string.iter().try_for_each(|ip_string| {
+            if let Some(ip_string) = ip_string {
+                let broadcast_address = IpNet::from_str(ip_string)
+                    .map_err(|e| {
+                        DataFusionError::Internal(format!(
+                            "Parsing {ip_string} failed with error {e}"
+                        ))
+                    })?
+                    .broadcast();
+                string_builder.append_value(broadcast_address.to_string());
+                Ok::<(), DataFusionError>(())
+            } else {
+                string_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(string_builder.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// Returns the address's family: 4 for IPv4, 6 for IPv6.
