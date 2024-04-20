@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::common::{get_json_string_type, get_json_type, get_value_at_string};
 use datafusion::arrow::array::{Array, ArrayRef, StringBuilder, UInt8Array};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::arrow::datatypes::DataType::Utf8;
+use datafusion::arrow::datatypes::DataType::{UInt8, Utf8};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
@@ -171,23 +171,58 @@ impl ScalarUDFImpl for JsonType {
 ///
 /// Examples:
 ///
-/// json_valid('{"x":35}') → 1
-/// json_valid('{"x":35') → 0
+/// json_valid('{"x": 35}') → 1
+/// json_valid('{"x": 35') → 0
 /// json_valid(NULL) → NULL
-pub fn json_valid(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
-    let mut uint_builder = UInt8Array::builder(json_strings.len());
+#[derive(Debug)]
+pub struct JsonValid {
+    signature: Signature,
+}
 
-    json_strings.iter().for_each(|json_string| {
-        if let Some(json_string) = json_string {
-            let json_value: serde_json::error::Result<Value> = serde_json::from_str(json_string);
-            uint_builder.append_value(json_value.is_ok() as u8);
-        } else {
-            uint_builder.append_null();
+impl JsonValid {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         }
-    });
+    }
+}
 
-    Ok(Arc::new(uint_builder.finish()) as ArrayRef)
+impl ScalarUDFImpl for JsonValid {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "json_valid"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(UInt8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+        let mut uint_builder = UInt8Array::builder(json_strings.len());
+
+        json_strings.iter().for_each(|json_string| {
+            if let Some(json_string) = json_string {
+                let json_value: serde_json::error::Result<Value> =
+                    serde_json::from_str(json_string);
+                uint_builder.append_value(json_value.is_ok() as u8);
+            } else {
+                uint_builder.append_null();
+            }
+        });
+
+        Ok(ColumnarValue::Array(
+            Arc::new(uint_builder.finish()) as ArrayRef
+        ))
+    }
 }
 
 #[cfg(feature = "sqlite")]
