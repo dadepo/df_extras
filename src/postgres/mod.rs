@@ -13,7 +13,7 @@ use crate::postgres::math_udfs::{
     Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
 };
 use crate::postgres::network_udfs::{
-    broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, Masklen,
+    broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, Masklen, Netmask,
     Network,
 };
 
@@ -50,7 +50,7 @@ fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_inet_same_family(ctx);
     register_inet_merge(ctx);
     register_masklen(ctx);
-    register_netmask(ctx);
+    ctx.register_udf(ScalarUDF::from(Netmask::new()));
     ctx.register_udf(ScalarUDF::from(Network::new()));
     ctx.register_udf(ScalarUDF::from(Masklen::new()));
     Ok(())
@@ -145,17 +145,4 @@ fn register_masklen(ctx: &SessionContext) {
     );
 
     ctx.register_udf(masklen_udf);
-}
-
-fn register_netmask(ctx: &SessionContext) {
-    let netmask_udf = make_scalar_function(netmask);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
-    let netmask_udf = ScalarUDF::new(
-        "netmask",
-        &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
-        &return_type,
-        &netmask_udf,
-    );
-
-    ctx.register_udf(netmask_udf);
 }

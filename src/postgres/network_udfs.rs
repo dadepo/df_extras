@@ -278,25 +278,61 @@ pub fn masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
 
 /// Constructs netmask for network.
 /// Returns NULL for columns with NULL values.
-pub fn netmask(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
-    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().try_for_each(|ip_string| {
-        if let Some(ip_string) = ip_string {
-            let netmask = IpNet::from_str(ip_string)
-                .map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-                })?
-                .netmask();
-            string_builder.append_value(netmask.to_string());
-            Ok::<(), DataFusionError>(())
-        } else {
-            string_builder.append_null();
-            Ok::<(), DataFusionError>(())
-        }
-    })?;
+#[derive(Debug)]
+pub struct Netmask {
+    signature: Signature,
+}
 
-    Ok(Arc::new(string_builder.finish()) as ArrayRef)
+impl Netmask {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Utf8], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for Netmask {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "netmask"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Utf8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut string_builder = StringBuilder::with_capacity(args[0].len(), u8::MAX as usize);
+        let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+        ip_string.iter().try_for_each(|ip_string| {
+            if let Some(ip_string) = ip_string {
+                let netmask = IpNet::from_str(ip_string)
+                    .map_err(|e| {
+                        DataFusionError::Internal(format!(
+                            "Parsing {ip_string} failed with error {e}"
+                        ))
+                    })?
+                    .netmask();
+                string_builder.append_value(netmask.to_string());
+                Ok::<(), DataFusionError>(())
+            } else {
+                string_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(string_builder.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// Extracts network part of address.
