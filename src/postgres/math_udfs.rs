@@ -170,22 +170,56 @@ pub fn ceiling(args: &[ArrayRef]) -> Result<ArrayRef> {
 }
 
 /// Integer quotient of y/x (truncates towards zero)
-pub fn div(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let first_values = datafusion::common::cast::as_float64_array(&args[0])?;
-    let second_values = datafusion::common::cast::as_float64_array(&args[1])?;
+#[derive(Debug)]
+pub struct Div {
+    signature: Signature,
+}
 
-    let mut int64array_builder = Int64Array::builder(args[0].len());
+impl Div {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(2, vec![Float64], Volatility::Immutable),
+        }
+    }
+}
 
-    first_values
-        .iter()
-        .flatten()
-        .zip(second_values.iter().flatten())
-        .try_for_each(|(first, second)| {
-            int64array_builder.append_value((first / second).floor() as i64);
-            Ok::<(), DataFusionError>(())
-        })?;
+impl ScalarUDFImpl for Div {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 
-    Ok(Arc::new(int64array_builder.finish()) as ArrayRef)
+    fn name(&self) -> &str {
+        "div"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Int64)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let first_values = datafusion::common::cast::as_float64_array(&args[0])?;
+        let second_values = datafusion::common::cast::as_float64_array(&args[1])?;
+
+        let mut int64array_builder = Int64Array::builder(args[0].len());
+
+        first_values
+            .iter()
+            .flatten()
+            .zip(second_values.iter().flatten())
+            .try_for_each(|(first, second)| {
+                int64array_builder.append_value((first / second).floor() as i64);
+                Ok::<(), DataFusionError>(())
+            })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(int64array_builder.finish()) as ArrayRef,
+        ))
+    }
 }
 
 /// Error function
