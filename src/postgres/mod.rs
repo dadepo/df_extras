@@ -10,7 +10,7 @@ use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
 use crate::postgres::math_udfs::{
-    acosd, asind, atand, ceiling, cosd, cotd, div, erf, erfc, sind, tand, RandomNormal,
+    acosd, asind, atand, ceiling, cosd, cotd, div, erf, sind, tand, Erfc, RandomNormal,
 };
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
@@ -37,7 +37,7 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     register_ceiling(ctx);
     register_div(ctx);
     register_erf(ctx);
-    register_erfc(ctx);
+    ctx.register_udf(ScalarUDF::from(Erfc::new()));
     ctx.register_udf(ScalarUDF::from(RandomNormal::new()));
     Ok(())
 }
@@ -157,19 +157,6 @@ fn register_erf(ctx: &SessionContext) {
     );
 
     ctx.register_udf(erf_udf);
-}
-
-fn register_erfc(ctx: &SessionContext) {
-    let erfc_udf = make_scalar_function(erfc);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
-    let erfc_udf = ScalarUDF::new(
-        "erfc",
-        &Signature::uniform(1, vec![Int64, UInt64, Float64], Volatility::Immutable),
-        &return_type,
-        &erfc_udf,
-    );
-
-    ctx.register_udf(erfc_udf);
 }
 
 fn register_div(ctx: &SessionContext) {
