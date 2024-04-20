@@ -67,5 +67,9 @@ mod test {
         let value = json!({"foo": ["bar", "baz"]});
         let result = get_value_at(value, "$.foo").unwrap();
         assert_eq!(result, json!(["bar", "baz"]));
+
+        let value = json!({"foo": ["bar", "baz"]});
+        let result = get_value_at(value, "$").unwrap();
+        assert_eq!(result, json!({"foo": ["bar", "baz"]}));
     }
 }

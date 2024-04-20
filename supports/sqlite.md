@@ -7,7 +7,7 @@
 |-------------|---------------------|
 | ✅︎          | json                | 
 | ✅︎          | json_valid          | 
-| 🚧︎︎        | json_array_length   | 
+| ✅︎          | json_array_length   | 
 | 🚧︎         | json_error_position | 
 | 🚧︎         | json_extract        | 
 | 🚧︎︎        | json_insert         | 
