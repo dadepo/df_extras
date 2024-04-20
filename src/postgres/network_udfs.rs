@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringBuilder, UInt8Array};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::arrow::datatypes::DataType::{Int64, UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::{Boolean, Int64, UInt8, Utf8};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
@@ -106,48 +106,86 @@ pub fn hostmask(args: &[ArrayRef]) -> Result<ArrayRef> {
     Ok(Arc::new(string_builder.finish()) as ArrayRef)
 }
 
-/// Checks if IP address are from the same family.
+/// Checks if IP address is from the same family.
 /// Returns NULL if any of the columns contain NULL values.
-pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut boolean_array = BooleanArray::builder(args[0].len());
-    let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
-    let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
+#[derive(Debug)]
+pub struct InetSameFamily {
+    signature: Signature,
+}
 
-    if first_inputs.len() != second_inputs.len() {
-        return Err(DataFusionError::Internal(
-            "First and second arguments are not of the same length".to_string(),
-        ));
+impl InetSameFamily {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(2, vec![Utf8], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for InetSameFamily {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    first_inputs
-        .iter()
-        .zip(second_inputs.iter())
-        .try_for_each(|(first, second)| {
-            if let (Some(first), Some(second)) = (first, second) {
-                let first_ip = IpAddr::from_str(first)
-                    .or_else(|_e| IpNet::from_str(first).map(|ip_net| ip_net.network()))
-                    .map_err(|e| {
-                        DataFusionError::Internal(format!("Parsing {first} failed with error {e}"))
-                    })?;
+    fn name(&self) -> &str {
+        "inet_same_family"
+    }
 
-                let second_ip = IpAddr::from_str(second)
-                    .or_else(|_e| IpNet::from_str(second).map(|ip_net| ip_net.network()))
-                    .map_err(|e| {
-                        DataFusionError::Internal(format!("Parsing {second} failed with error {e}"))
-                    })?;
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
 
-                boolean_array.append_value(
-                    first_ip.is_ipv4() && second_ip.is_ipv4()
-                        || first_ip.is_ipv6() && second_ip.is_ipv6(),
-                );
-                Ok::<(), DataFusionError>(())
-            } else {
-                boolean_array.append_null();
-                Ok::<(), DataFusionError>(())
-            }
-        })?;
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Boolean)
+    }
 
-    Ok(Arc::new(boolean_array.finish()) as ArrayRef)
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut boolean_array = BooleanArray::builder(args[0].len());
+        let first_inputs = datafusion::common::cast::as_string_array(&args[0])?;
+        let second_inputs = datafusion::common::cast::as_string_array(&args[1])?;
+
+        if first_inputs.len() != second_inputs.len() {
+            return Err(DataFusionError::Internal(
+                "First and second arguments are not of the same length".to_string(),
+            ));
+        }
+
+        first_inputs
+            .iter()
+            .zip(second_inputs.iter())
+            .try_for_each(|(first, second)| {
+                if let (Some(first), Some(second)) = (first, second) {
+                    let first_ip = IpAddr::from_str(first)
+                        .or_else(|_e| IpNet::from_str(first).map(|ip_net| ip_net.network()))
+                        .map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Parsing {first} failed with error {e}"
+                            ))
+                        })?;
+
+                    let second_ip = IpAddr::from_str(second)
+                        .or_else(|_e| IpNet::from_str(second).map(|ip_net| ip_net.network()))
+                        .map_err(|e| {
+                            DataFusionError::Internal(format!(
+                                "Parsing {second} failed with error {e}"
+                            ))
+                        })?;
+
+                    boolean_array.append_value(
+                        first_ip.is_ipv4() && second_ip.is_ipv4()
+                            || first_ip.is_ipv6() && second_ip.is_ipv6(),
+                    );
+                    Ok::<(), DataFusionError>(())
+                } else {
+                    boolean_array.append_null();
+                    Ok::<(), DataFusionError>(())
+                }
+            })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(boolean_array.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// Returns the smallest network which includes both of the given networks.
