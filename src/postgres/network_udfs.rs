@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use datafusion::arrow::array::{Array, ArrayRef, BooleanArray, StringBuilder, UInt8Array};
 use datafusion::arrow::datatypes::DataType;
-use datafusion::arrow::datatypes::DataType::{Int64, Utf8};
+use datafusion::arrow::datatypes::DataType::{Int64, UInt8, Utf8};
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
 use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
@@ -255,25 +255,61 @@ pub fn inet_same_family(args: &[ArrayRef]) -> Result<ArrayRef> {
 
 /// Extracts netmask length.
 /// Returns NULL for columns with NULL values.
-pub fn masklen(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut int8array = UInt8Array::builder(args[0].len());
-    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().try_for_each(|ip_string| {
-        if let Some(ip_string) = ip_string {
-            let prefix_len = IpNet::from_str(ip_string)
-                .map_err(|e| {
-                    DataFusionError::Internal(format!("Parsing {ip_string} failed with error {e}"))
-                })?
-                .prefix_len();
-            int8array.append_value(prefix_len);
-            Ok::<(), DataFusionError>(())
-        } else {
-            int8array.append_null();
-            Ok::<(), DataFusionError>(())
-        }
-    })?;
+#[derive(Debug)]
+pub struct MaskLen {
+    signature: Signature,
+}
 
-    Ok(Arc::new(int8array.finish()) as ArrayRef)
+impl MaskLen {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Utf8], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for MaskLen {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "masklen"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(UInt8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut int8array = UInt8Array::builder(args[0].len());
+        let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+        ip_string.iter().try_for_each(|ip_string| {
+            if let Some(ip_string) = ip_string {
+                let prefix_len = IpNet::from_str(ip_string)
+                    .map_err(|e| {
+                        DataFusionError::Internal(format!(
+                            "Parsing {ip_string} failed with error {e}"
+                        ))
+                    })?
+                    .prefix_len();
+                int8array.append_value(prefix_len);
+                Ok::<(), DataFusionError>(())
+            } else {
+                int8array.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(int8array.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// Constructs netmask for network.
