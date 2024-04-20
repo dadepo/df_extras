@@ -73,61 +73,96 @@ impl ScalarUDFImpl for Json {
 /// function returns the "type" of the element in X that is selected by path P.
 /// The "type" returned by json_type() is one of the following SQL
 /// text values: 'null', 'true', 'false', 'integer', 'real', 'text', 'array', or 'object'.
-/// If the path P in json_type(X,P) selects an element that does not exist in X,
+/// If the path P in json_type(X, P) selects an element that does not exist in X,
 /// then this function returns NULL.
-pub fn json_type(args: &[ArrayRef]) -> Result<ArrayRef> {
-    if args.is_empty() || args.len() > 2 {
-        return Err(DataFusionError::Internal(
-            "wrong number of arguments to function json_type()".to_string(),
-        ));
+#[derive(Debug)]
+pub struct JsonType {
+    signature: Signature,
+}
+
+impl JsonType {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::variadic(vec![Utf8], Volatility::Immutable),
+        }
+    }
+}
+
+impl ScalarUDFImpl for JsonType {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 
-    let mut string_builder = StringBuilder::with_capacity(args.len(), u8::MAX as usize);
-    if args.len() == 1 {
-        //1. Just json and no path
-        let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
-        json_strings.iter().try_for_each(|json_string| {
-            if let Some(json_string) = json_string {
-                string_builder.append_value(
-                    get_json_string_type(json_string)
-                        .map_err(|err| DataFusionError::Internal(err.to_string()))?,
-                );
-                Ok::<(), DataFusionError>(())
-            } else {
-                string_builder.append_null();
-                Ok::<(), DataFusionError>(())
-            }
-        })?;
-    } else {
-        //2. Json and path
-        let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
-        let paths = datafusion::common::cast::as_string_array(&args[1])?;
+    fn name(&self) -> &str {
+        "json_type"
+    }
 
-        json_strings
-            .iter()
-            .zip(paths.iter())
-            .try_for_each(|(json_string, path)| {
-                if let (Some(json_string), Some(path)) = (json_string, path) {
-                    match get_value_at_string(json_string, path) {
-                        Ok(json_at_path) => {
-                            string_builder.append_value(
-                                get_json_type(&json_at_path)
-                                    .map_err(|err| DataFusionError::Internal(err.to_string()))?,
-                            );
-                        }
-                        Err(_) => {
-                            string_builder.append_null();
-                        }
-                    }
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Utf8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        if args.is_empty() || args.len() > 2 {
+            return Err(DataFusionError::Internal(
+                "wrong number of arguments to function json_type()".to_string(),
+            ));
+        }
+
+        let mut string_builder = StringBuilder::with_capacity(args.len(), u8::MAX as usize);
+        if args.len() == 1 {
+            //1. Just json and no path
+            let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+            json_strings.iter().try_for_each(|json_string| {
+                if let Some(json_string) = json_string {
+                    string_builder.append_value(
+                        get_json_string_type(json_string)
+                            .map_err(|err| DataFusionError::Internal(err.to_string()))?,
+                    );
                     Ok::<(), DataFusionError>(())
                 } else {
                     string_builder.append_null();
                     Ok::<(), DataFusionError>(())
                 }
             })?;
-    }
+        } else {
+            //2. Json and path
+            let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+            let paths = datafusion::common::cast::as_string_array(&args[1])?;
 
-    Ok(Arc::new(string_builder.finish()) as ArrayRef)
+            json_strings
+                .iter()
+                .zip(paths.iter())
+                .try_for_each(|(json_string, path)| {
+                    if let (Some(json_string), Some(path)) = (json_string, path) {
+                        match get_value_at_string(json_string, path) {
+                            Ok(json_at_path) => {
+                                string_builder.append_value(
+                                    get_json_type(&json_at_path).map_err(|err| {
+                                        DataFusionError::Internal(err.to_string())
+                                    })?,
+                                );
+                            }
+                            Err(_) => {
+                                string_builder.append_null();
+                            }
+                        }
+                        Ok::<(), DataFusionError>(())
+                    } else {
+                        string_builder.append_null();
+                        Ok::<(), DataFusionError>(())
+                    }
+                })?;
+        }
+
+        Ok(ColumnarValue::Array(
+            Arc::new(string_builder.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// The json_valid(X) function return 1 if the argument X is well-formed canonical RFC-7159 JSON
