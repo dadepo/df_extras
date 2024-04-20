@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType::{Boolean, Int64, UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::{Boolean, UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
@@ -14,7 +14,7 @@ use crate::postgres::math_udfs::{
 };
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
-    set_masklen,
+    Masklen,
 };
 
 mod math_udfs;
@@ -52,7 +52,7 @@ fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_masklen(ctx);
     register_netmask(ctx);
     register_network(ctx);
-    register_set_masklen(ctx);
+    ctx.register_udf(ScalarUDF::from(Masklen::new()));
     Ok(())
 }
 
@@ -171,17 +171,4 @@ fn register_network(ctx: &SessionContext) {
     );
 
     ctx.register_udf(network_udf);
-}
-
-fn register_set_masklen(ctx: &SessionContext) {
-    let set_masklen_udf = make_scalar_function(set_masklen);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
-    let set_masklen_udf = ScalarUDF::new(
-        "set_masklen",
-        &Signature::exact(vec![Utf8, Int64], Volatility::Immutable),
-        &return_type,
-        &set_masklen_udf,
-    );
-
-    ctx.register_udf(set_masklen_udf);
 }
