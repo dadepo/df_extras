@@ -119,22 +119,56 @@ pub fn sind(args: &[ArrayRef]) -> Result<ArrayRef> {
 }
 
 /// Inverse tangent, result in degrees.
-pub fn atand(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let values = datafusion::common::cast::as_float64_array(&args[0])?;
-    let mut float64array_builder = Float64Array::builder(args[0].len());
+#[derive(Debug)]
+pub struct Atand {
+    signature: Signature,
+}
 
-    values.iter().try_for_each(|value| {
-        if let Some(value) = value {
-            let result = value.atan().to_degrees();
-            float64array_builder.append_value(result);
-            Ok::<(), DataFusionError>(())
-        } else {
-            float64array_builder.append_null();
-            Ok::<(), DataFusionError>(())
+impl Atand {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Float64], Volatility::Immutable),
         }
-    })?;
+    }
+}
 
-    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+impl ScalarUDFImpl for Atand {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "atand"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Float64)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let values = datafusion::common::cast::as_float64_array(&args[0])?;
+        let mut float64array_builder = Float64Array::builder(args[0].len());
+
+        values.iter().try_for_each(|value| {
+            if let Some(value) = value {
+                let result = value.atan().to_degrees();
+                float64array_builder.append_value(result);
+                Ok::<(), DataFusionError>(())
+            } else {
+                float64array_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(float64array_builder.finish()) as ArrayRef,
+        ))
+    }
 }
 
 /// Tangent, argument in degrees.
