@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType::{UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::Utf8;
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
@@ -13,7 +13,7 @@ use crate::postgres::math_udfs::{
     Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
 };
 use crate::postgres::network_udfs::{
-    broadcast, family, Host, HostMask, InetMerge, InetSameFamily, MaskLen, Netmask, Network,
+    broadcast, Family, Host, HostMask, InetMerge, InetSameFamily, MaskLen, Netmask, Network,
     SetMaskLen,
 };
 
@@ -44,7 +44,7 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
 
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_broadcast(ctx);
-    register_family(ctx);
+    ctx.register_udf(ScalarUDF::from(Family::new()));
     ctx.register_udf(ScalarUDF::from(Host::new()));
     ctx.register_udf(ScalarUDF::from(HostMask::new()));
     ctx.register_udf(ScalarUDF::from(InetSameFamily::new()));
@@ -67,17 +67,4 @@ fn register_broadcast(ctx: &SessionContext) {
     );
 
     ctx.register_udf(broadcast_udf);
-}
-
-fn register_family(ctx: &SessionContext) {
-    let family_udf = make_scalar_function(family);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(UInt8)));
-    let family_udf = ScalarUDF::new(
-        "family",
-        &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
-        &return_type,
-        &family_udf,
-    );
-
-    ctx.register_udf(family_udf);
 }

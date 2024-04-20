@@ -35,29 +35,64 @@ pub fn broadcast(args: &[ArrayRef]) -> Result<ArrayRef> {
 
 /// Returns the address's family: 4 for IPv4, 6 for IPv6.
 /// Returns NULL for columns with NULL values.
-pub fn family(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let mut int8array = UInt8Array::builder(args[0].len());
-    let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
-    ip_string.iter().try_for_each(|ip_string| {
-        if let Some(ip_string) = ip_string {
-            let family = if ip_string.parse::<Ipv4Net>().is_ok() {
-                4
-            } else if ip_string.parse::<Ipv6Net>().is_ok() {
-                6
-            } else {
-                return Err(DataFusionError::Internal(format!(
-                    "Could not parse {ip_string} to either IPv4 or IPv6"
-                )));
-            };
+#[derive(Debug)]
+pub struct Family {
+    signature: Signature,
+}
 
-            int8array.append_value(family);
-            Ok::<(), DataFusionError>(())
-        } else {
-            int8array.append_null();
-            Ok::<(), DataFusionError>(())
+impl Family {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         }
-    })?;
-    Ok(Arc::new(int8array.finish()) as ArrayRef)
+    }
+}
+
+impl ScalarUDFImpl for Family {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "family"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(UInt8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut int8array = UInt8Array::builder(args[0].len());
+        let ip_string = datafusion::common::cast::as_string_array(&args[0])?;
+        ip_string.iter().try_for_each(|ip_string| {
+            if let Some(ip_string) = ip_string {
+                let family = if ip_string.parse::<Ipv4Net>().is_ok() {
+                    4
+                } else if ip_string.parse::<Ipv6Net>().is_ok() {
+                    6
+                } else {
+                    return Err(DataFusionError::Internal(format!(
+                        "Could not parse {ip_string} to either IPv4 or IPv6"
+                    )));
+                };
+
+                int8array.append_value(family);
+                Ok::<(), DataFusionError>(())
+            } else {
+                int8array.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(int8array.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// Gives the host address for the network.
