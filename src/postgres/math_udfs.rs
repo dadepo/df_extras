@@ -189,54 +189,98 @@ pub fn div(args: &[ArrayRef]) -> Result<ArrayRef> {
 }
 
 /// Error function
-pub fn erf(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let column_data = &args[0];
-    let data = column_data.into_data();
-    let data_type = data.data_type();
+#[derive(Debug)]
+pub struct Erf {
+    signature: Signature,
+}
 
-    let mut float64array_builder = Float64Array::builder(args[0].len());
-    match data_type {
-        DataType::Float64 => {
-            let values = datafusion::common::cast::as_float64_array(&args[0])?;
-            values.iter().try_for_each(|value| {
-                if let Some(value) = value {
-                    float64array_builder.append_value(libm::erf(value))
-                } else {
-                    float64array_builder.append_null();
-                }
-                Ok::<(), DataFusionError>(())
-            })?;
+impl Erf {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Int64, UInt64, Float64], Volatility::Immutable),
         }
-        DataType::Int64 => {
-            let values = datafusion::common::cast::as_int64_array(&args[0])?;
-            values.iter().try_for_each(|value| {
-                if let Some(value) = value {
-                    float64array_builder.append_value(libm::erf(value as f64))
-                } else {
-                    float64array_builder.append_null();
-                }
-                Ok::<(), DataFusionError>(())
-            })?;
-        }
-        DataType::UInt64 => {
-            let values = datafusion::common::cast::as_uint64_array(&args[0])?;
-            values.iter().try_for_each(|value| {
-                if let Some(value) = value {
-                    float64array_builder.append_value(libm::erf(value as f64))
-                } else {
-                    float64array_builder.append_null();
-                }
-                Ok::<(), DataFusionError>(())
-            })?;
-        }
-        t => {
-            return Err(DataFusionError::Internal(format!(
-                "Unsupported type {t} for erf function"
-            )))
-        }
-    };
+    }
+}
 
-    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+impl ScalarUDFImpl for Erf {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "erf"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Float64)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let column_data = args
+            .first()
+            .ok_or(DataFusionError::Internal("Empty argument".to_string()))?;
+
+        let col_array = match column_data {
+            ColumnarValue::Array(array) => array,
+            ColumnarValue::Scalar(_) => {
+                return Err(DataFusionError::Execution("Empty argument".to_string()))
+            }
+        };
+
+        let mut float64array_builder = Float64Array::builder(col_array.len());
+        let column_data = col_array;
+        let data = column_data.into_data();
+        let data_type = data.data_type();
+
+        match data_type {
+            Float64 => {
+                let values = datafusion::common::cast::as_float64_array(&col_array)?;
+                values.iter().try_for_each(|value| {
+                    if let Some(value) = value {
+                        float64array_builder.append_value(libm::erf(value))
+                    } else {
+                        float64array_builder.append_null();
+                    }
+                    Ok::<(), DataFusionError>(())
+                })?;
+            }
+            Int64 => {
+                let values = datafusion::common::cast::as_int64_array(&col_array)?;
+                values.iter().try_for_each(|value| {
+                    if let Some(value) = value {
+                        float64array_builder.append_value(libm::erf(value as f64))
+                    } else {
+                        float64array_builder.append_null();
+                    }
+                    Ok::<(), DataFusionError>(())
+                })?;
+            }
+            UInt64 => {
+                let values = datafusion::common::cast::as_uint64_array(&col_array)?;
+                values.iter().try_for_each(|value| {
+                    if let Some(value) = value {
+                        float64array_builder.append_value(libm::erf(value as f64))
+                    } else {
+                        float64array_builder.append_null();
+                    }
+                    Ok::<(), DataFusionError>(())
+                })?;
+            }
+            t => {
+                return Err(DataFusionError::Internal(format!(
+                    "Unsupported type {t} for erf function"
+                )))
+            }
+        };
+
+        Ok(ColumnarValue::Array(
+            Arc::new(float64array_builder.finish()) as ArrayRef,
+        ))
+    }
 }
 
 /// Complementary error function
