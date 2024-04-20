@@ -3,14 +3,14 @@
 
 use std::sync::Arc;
 
-use datafusion::arrow::datatypes::DataType::{Boolean, Float64, Int64, UInt8, Utf8};
+use datafusion::arrow::datatypes::DataType::{Boolean, Int64, UInt8, Utf8};
 use datafusion::error::Result;
 use datafusion::logical_expr::{ReturnTypeFunction, ScalarUDF, Signature, Volatility};
 use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
 use crate::postgres::math_udfs::{
-    acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
+    Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
 };
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
@@ -27,7 +27,7 @@ pub fn register_postgres_udfs(ctx: &SessionContext) -> Result<()> {
 }
 
 fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
-    register_acosd(ctx);
+    ctx.register_udf(ScalarUDF::from(Acosd::new()));
     ctx.register_udf(ScalarUDF::from(Cosd::new()));
     ctx.register_udf(ScalarUDF::from(Cotd::new()));
     ctx.register_udf(ScalarUDF::from(Asind::new()));
@@ -40,19 +40,6 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     ctx.register_udf(ScalarUDF::from(Erfc::new()));
     ctx.register_udf(ScalarUDF::from(RandomNormal::new()));
     Ok(())
-}
-
-fn register_acosd(ctx: &SessionContext) {
-    let acosd_udf = make_scalar_function(acosd);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
-    let acosd_udf = ScalarUDF::new(
-        "acosd",
-        &Signature::uniform(1, vec![Float64], Volatility::Immutable),
-        &return_type,
-        &acosd_udf,
-    );
-
-    ctx.register_udf(acosd_udf);
 }
 
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
