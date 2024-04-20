@@ -157,16 +157,50 @@ pub fn tand(args: &[ArrayRef]) -> Result<ArrayRef> {
 }
 
 /// Nearest integer greater than or equal to argument (same as ceil).
-pub fn ceiling(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let values = datafusion::common::cast::as_float64_array(&args[0])?;
+#[derive(Debug)]
+pub struct Ceiling {
+    signature: Signature,
+}
 
-    let mut float64array_builder = Float64Array::builder(args[0].len());
-    values
-        .iter()
-        .flatten()
-        .for_each(|decimal| float64array_builder.append_value(decimal.ceil()));
+impl Ceiling {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Float64], Volatility::Immutable),
+        }
+    }
+}
 
-    Ok(Arc::new(float64array_builder.finish()) as ArrayRef)
+impl ScalarUDFImpl for Ceiling {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "ceiling"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Float64)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let values = datafusion::common::cast::as_float64_array(&args[0])?;
+
+        let mut float64array_builder = Float64Array::builder(args[0].len());
+        values
+            .iter()
+            .flatten()
+            .for_each(|decimal| float64array_builder.append_value(decimal.ceil()));
+
+        Ok(ColumnarValue::Array(
+            Arc::new(float64array_builder.finish()) as ArrayRef,
+        ))
+    }
 }
 
 /// Integer quotient of y/x (truncates towards zero)
@@ -217,7 +251,7 @@ impl ScalarUDFImpl for Div {
             })?;
 
         Ok(ColumnarValue::Array(
-            Arc::new(int64array_builder.finish()) as ArrayRef,
+            Arc::new(int64array_builder.finish()) as ArrayRef
         ))
     }
 }
