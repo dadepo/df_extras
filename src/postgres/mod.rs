@@ -13,7 +13,7 @@ use crate::postgres::math_udfs::{
     Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
 };
 use crate::postgres::network_udfs::{
-    broadcast, family, host, HostMask, InetMerge, InetSameFamily, MaskLen, Netmask, Network,
+    broadcast, family, Host, HostMask, InetMerge, InetSameFamily, MaskLen, Netmask, Network,
     SetMaskLen,
 };
 
@@ -45,7 +45,7 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     register_broadcast(ctx);
     register_family(ctx);
-    register_host(ctx);
+    ctx.register_udf(ScalarUDF::from(Host::new()));
     ctx.register_udf(ScalarUDF::from(HostMask::new()));
     ctx.register_udf(ScalarUDF::from(InetSameFamily::new()));
     ctx.register_udf(ScalarUDF::from(InetMerge::new()));
@@ -80,17 +80,4 @@ fn register_family(ctx: &SessionContext) {
     );
 
     ctx.register_udf(family_udf);
-}
-
-fn register_host(ctx: &SessionContext) {
-    let host_udf = make_scalar_function(host);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Utf8)));
-    let host_udf = ScalarUDF::new(
-        "host",
-        &Signature::uniform(1, vec![Utf8], Volatility::Immutable),
-        &return_type,
-        &host_udf,
-    );
-
-    ctx.register_udf(host_udf);
 }
