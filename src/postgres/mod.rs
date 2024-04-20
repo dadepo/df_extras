@@ -14,7 +14,7 @@ use crate::postgres::math_udfs::{
 };
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, MaskLen, Netmask, Network,
-    SetMasklen,
+    SetMaskLen,
 };
 
 mod math_udfs;
@@ -52,7 +52,7 @@ fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
     ctx.register_udf(ScalarUDF::from(MaskLen::new()));
     ctx.register_udf(ScalarUDF::from(Netmask::new()));
     ctx.register_udf(ScalarUDF::from(Network::new()));
-    ctx.register_udf(ScalarUDF::from(SetMasklen::new()));
+    ctx.register_udf(ScalarUDF::from(SetMaskLen::new()));
     Ok(())
 }
 
