@@ -10,7 +10,7 @@ use datafusion::physical_expr::functions::make_scalar_function;
 use datafusion::prelude::SessionContext;
 
 use crate::postgres::math_udfs::{
-    acosd, asind, atand, cosd, cotd, sind, tand, Ceiling, Div, Erf, Erfc, RandomNormal,
+    acosd, asind, atand, cosd, cotd, sind, Ceiling, Div, Erf, Erfc, RandomNormal, Tand,
 };
 use crate::postgres::network_udfs::{
     broadcast, family, host, hostmask, inet_merge, inet_same_family, masklen, netmask, network,
@@ -33,7 +33,7 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     register_asind(ctx);
     register_sind(ctx);
     register_atand(ctx);
-    register_tand(ctx);
+    ctx.register_udf(ScalarUDF::from(Tand::new()));
     ctx.register_udf(ScalarUDF::from(Ceiling::new()));
     ctx.register_udf(ScalarUDF::from(Div::new()));
     ctx.register_udf(ScalarUDF::from(Erf::new()));
@@ -118,19 +118,6 @@ fn register_atand(ctx: &SessionContext) {
     );
 
     ctx.register_udf(atand_udf);
-}
-
-fn register_tand(ctx: &SessionContext) {
-    let tand_udf = make_scalar_function(tand);
-    let return_type: ReturnTypeFunction = Arc::new(move |_| Ok(Arc::new(Float64)));
-    let tand_udf = ScalarUDF::new(
-        "tand",
-        &Signature::uniform(1, vec![Float64], Volatility::Immutable),
-        &return_type,
-        &tand_udf,
-    );
-
-    ctx.register_udf(tand_udf);
 }
 
 fn register_network_udfs(ctx: &SessionContext) -> Result<()> {
