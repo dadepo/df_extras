@@ -2,34 +2,71 @@ use std::sync::Arc;
 
 use crate::common::{get_json_string_type, get_json_type, get_value_at_string};
 use datafusion::arrow::array::{Array, ArrayRef, StringBuilder, UInt8Array};
+use datafusion::arrow::datatypes::DataType;
+use datafusion::arrow::datatypes::DataType::Utf8;
 use datafusion::common::DataFusionError;
 use datafusion::error::Result;
+use datafusion::logical_expr::{ColumnarValue, ScalarUDFImpl, Signature, Volatility};
 use serde_json::Value;
 
 /// The json(X) function verifies that its argument X is a valid JSON string and returns a minified
 /// version of that JSON string (with all unnecessary whitespace removed).
 /// If X is not a well-formed JSON string, then this routine throws an error.
-pub fn json(args: &[ArrayRef]) -> Result<ArrayRef> {
-    let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+#[derive(Debug)]
+pub struct Json {
+    signature: Signature,
+}
 
-    let mut string_builder = StringBuilder::with_capacity(json_strings.len(), u8::MAX as usize);
-    json_strings.iter().try_for_each(|json_string| {
-        if let Some(json_string) = json_string {
-            let value: Value = serde_json::from_str(json_string).map_err(|_| {
-                DataFusionError::Internal("Runtime error: malformed JSON".to_string())
-            })?;
-            let pretty_json = serde_json::to_string(&value).map_err(|_| {
-                DataFusionError::Internal("Runtime error: malformed JSON".to_string())
-            })?;
-            string_builder.append_value(pretty_json);
-            Ok::<(), DataFusionError>(())
-        } else {
-            string_builder.append_null();
-            Ok::<(), DataFusionError>(())
+impl Json {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Utf8], Volatility::Immutable),
         }
-    })?;
+    }
+}
 
-    Ok(Arc::new(string_builder.finish()) as ArrayRef)
+impl ScalarUDFImpl for Json {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "json"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Utf8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let json_strings = datafusion::common::cast::as_string_array(&args[0])?;
+
+        let mut string_builder = StringBuilder::with_capacity(json_strings.len(), u8::MAX as usize);
+        json_strings.iter().try_for_each(|json_string| {
+            if let Some(json_string) = json_string {
+                let value: Value = serde_json::from_str(json_string).map_err(|_| {
+                    DataFusionError::Internal("Runtime error: malformed JSON".to_string())
+                })?;
+                let pretty_json = serde_json::to_string(&value).map_err(|_| {
+                    DataFusionError::Internal("Runtime error: malformed JSON".to_string())
+                })?;
+                string_builder.append_value(pretty_json);
+                Ok::<(), DataFusionError>(())
+            } else {
+                string_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(string_builder.finish()) as ArrayRef
+        ))
+    }
 }
 
 /// The json_type(X) function returns the "type" of the outermost element of X. The json_type(X,P)
