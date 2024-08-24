@@ -6,7 +6,7 @@ use datafusion::logical_expr::ScalarUDF;
 use datafusion::prelude::SessionContext;
 
 use crate::postgres::math_udfs::{
-    Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, RandomNormal, Sind, Tand,
+    Acosd, Asind, Atand, Ceiling, Cosd, Cotd, Div, Erf, Erfc, Mod, RandomNormal, Sind, Tand,
 };
 use crate::postgres::network_udfs::{
     Broadcast, Family, Host, HostMask, InetMerge, InetSameFamily, MaskLen, Netmask, Network,
@@ -35,6 +35,7 @@ fn register_math_udfs(ctx: &SessionContext) -> Result<()> {
     ctx.register_udf(ScalarUDF::from(Erf::new()));
     ctx.register_udf(ScalarUDF::from(Erfc::new()));
     ctx.register_udf(ScalarUDF::from(RandomNormal::new()));
+    ctx.register_udf(ScalarUDF::from(Mod::new()));
     Ok(())
 }
 

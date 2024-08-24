@@ -830,6 +830,65 @@ impl ScalarUDFImpl for RandomNormal {
     }
 }
 
+#[derive(Debug)]
+pub struct Mod {
+    signature: Signature,
+}
+
+impl Mod {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::variadic(vec![Int64, UInt64], Volatility::Volatile),
+        }
+    }
+}
+
+/// Remainder of y/x
+impl ScalarUDFImpl for Mod {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "mod"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(Int64)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        if args.len() > 2_usize {
+            return Err(DataFusionError::Internal(
+                "No function matches the given name and argument types.".to_string(),
+            ));
+        }
+
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let first_values = datafusion::common::cast::as_int64_array(&args[0])?;
+        let second_values = datafusion::common::cast::as_int64_array(&args[1])?;
+
+        let mut int64array_builder = Int64Array::builder(args[0].len());
+
+        first_values
+            .iter()
+            .flatten()
+            .zip(second_values.iter().flatten())
+            .try_for_each(|(first, second)| {
+                int64array_builder.append_value(first % second);
+                Ok::<(), DataFusionError>(())
+            })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(int64array_builder.finish()) as ArrayRef
+        ))
+    }
+}
+
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
@@ -1270,6 +1329,22 @@ mod tests {
         assert!(!has_duplicates(&vec_of_f64[..]));
         // Last element should be None.
         assert_eq!(vec_of_f64.last(), Some(&None));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_mod() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+        let df = ctx.sql("select mod(9, 4) as col_result").await?;
+
+        let batches = df.clone().collect().await?;
+
+        let columns = &batches.first().unwrap().column(0);
+        let result = as_int64_array(columns)?;
+        let result = result.value(0);
+
+        assert_eq!(result, 1_i64);
 
         Ok(())
     }
