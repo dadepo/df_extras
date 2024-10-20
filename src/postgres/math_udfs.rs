@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int64Array};
+use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int64Array, Int8Array};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::datatypes::DataType::{Float64, Int64, UInt64};
 
@@ -889,6 +889,99 @@ impl ScalarUDFImpl for Mod {
     }
 }
 
+#[derive(Debug)]
+pub struct Sign {
+    signature: Signature,
+}
+
+impl Sign {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Int64, UInt64, Float64], Volatility::Volatile),
+        }
+    }
+}
+
+impl ScalarUDFImpl for Sign {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "sign"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Int8)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut int8array_builder = Int8Array::builder(args[0].len());
+        match args.first() {
+           Some(values) => {
+               match values.data_type() {
+                   DataType::Int64 | DataType::Int32 | DataType::Int16 | DataType::Int8 => {
+                       let values = datafusion::common::cast::as_int64_array(values)?;
+                       values.iter().for_each(|value| {
+                           match value {
+                               Some(value) => int8array_builder.append_value(value.cmp(&0_i64) as i8),
+                               None => int8array_builder.append_null()
+                           }
+                       });
+                   },
+                   DataType::UInt64 | DataType::UInt32 | DataType::UInt16 | DataType::UInt8 => {
+                       let values = datafusion::common::cast::as_uint64_array(values)?;
+                       values.iter().for_each(|value| {
+                           match value {
+                               Some(value) => int8array_builder.append_value(value.cmp(&0_u64) as i8),
+                               None => int8array_builder.append_null()
+                           }
+                       });
+                   },
+                   DataType::Float64 | DataType::Float32 | DataType::Float16 => {
+                       let values = datafusion::common::cast::as_float64_array(values)?;
+                       values.iter().for_each(|value| {
+                           match value {
+                               Some(value) => {
+                                   if value == 0_f64 {
+                                       int8array_builder.append_value(0)
+                                   } else if value > 0_f64 {
+                                       int8array_builder.append_value(1)
+                                   } else {
+                                       int8array_builder.append_value(-1)
+                                   }
+                               },
+                               None => int8array_builder.append_null()
+                           }
+                       });
+                   },
+                   _ => {
+                       return Err(DataFusionError::Internal(
+                           "No function matches the given name and argument types. You might need to add explicit type casts"
+                               .to_string(),
+                       ))
+                   }
+               }
+           }
+           None => {
+               return Err(DataFusionError::Internal(
+                   "No function matches the given name and argument types. You might need to add explicit type casts"
+                       .to_string(),
+               ))
+           }
+       }
+
+        Ok(ColumnarValue::Array(
+            Arc::new(int8array_builder.finish()) as ArrayRef
+        ))
+    }
+}
+
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
@@ -1346,6 +1439,58 @@ mod tests {
 
         assert_eq!(result, 1_i64);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sign() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+
+        let df = ctx.sql("select index, sign(uint) as uint, sign(int) as int, sign(float) as float from maths_table ORDER BY index ASC").await?;
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+------+-----+-------+
+| index | uint | int | float |
++-------+------+-----+-------+
+| 1     | 1    | -1  | 1     |
+| 2     | 1    | 1   | 1     |
+| 3     |      |     |       |
++-------+------+-----+-------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx
+            .sql("select sign(0) as uint, sign(0.0) as float")
+            .await?;
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++------+-------+
+| uint | float |
++------+-------+
+| 0    | 0     |
++------+-------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
         Ok(())
     }
 
