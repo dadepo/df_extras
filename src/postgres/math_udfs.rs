@@ -1,6 +1,7 @@
+use std::str::FromStr;
 use std::sync::Arc;
 
-use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int64Array, Int8Array};
+use datafusion::arrow::array::{Array, ArrayRef, Float64Array, Int32Array, Int64Array, Int8Array};
 use datafusion::arrow::datatypes::DataType;
 use datafusion::arrow::datatypes::DataType::{Float64, Int64, UInt64};
 
@@ -12,6 +13,7 @@ use datafusion::physical_plan::ColumnarValue;
 use rand::distributions::Distribution;
 use rand::thread_rng;
 use rand_distr::Normal;
+use rust_decimal::Decimal;
 
 /// Inverse cosine, result in degrees.
 #[derive(Debug)]
@@ -982,6 +984,65 @@ impl ScalarUDFImpl for Sign {
     }
 }
 
+#[derive(Debug)]
+pub struct MinScale {
+    signature: Signature,
+}
+
+impl MinScale {
+    pub fn new() -> Self {
+        Self {
+            signature: Signature::uniform(1, vec![Float64], Volatility::Volatile),
+        }
+    }
+}
+
+impl ScalarUDFImpl for MinScale {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn name(&self) -> &str {
+        "min_scale"
+    }
+
+    fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    fn return_type(&self, _arg_types: &[DataType]) -> Result<DataType> {
+        Ok(DataType::Int32)
+    }
+
+    fn invoke(&self, args: &[ColumnarValue]) -> Result<ColumnarValue> {
+        let args = ColumnarValue::values_to_arrays(args)?;
+        let mut int32array_builder = Int32Array::builder(args[0].len());
+        let values = datafusion::common::cast::as_float64_array(&args[0])?;
+
+        values.iter().try_for_each(|value| {
+            if let Some(value) = value {
+                let scale = Decimal::from_str(&value.to_string())
+                    .map_err(|_| {
+                        DataFusionError::Internal(
+                            "Runtime error: Failed to parse value to decimal".to_string(),
+                        )
+                    })?
+                    .normalize()
+                    .scale();
+                int32array_builder.append_value(scale as i32);
+                Ok::<(), DataFusionError>(())
+            } else {
+                int32array_builder.append_null();
+                Ok::<(), DataFusionError>(())
+            }
+        })?;
+
+        Ok(ColumnarValue::Array(
+            Arc::new(int32array_builder.finish()) as ArrayRef
+        ))
+    }
+}
+
 #[cfg(feature = "postgres")]
 #[cfg(test)]
 mod tests {
@@ -1491,6 +1552,59 @@ mod tests {
             .collect();
 
         assert_batches_sorted_eq!(expected, &batches);
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_min_scale() -> Result<()> {
+        let ctx = register_udfs_for_test()?;
+
+        let df = ctx.sql("select index, float, min_scale(float) as scale from maths_table ORDER BY index ASC").await?;
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-------+-------+-------+
+| index | float | scale |
++-------+-------+-------+
+| 1     | 1.0   | 0     |
+| 2     | 3.3   | 1     |
+| 3     |       |       |
++-------+-------+-------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+
+        let df = ctx
+            .sql("select min_scale(123.980010000) as min_scale")
+            .await?;
+        let batches = df.clone().collect().await?;
+
+        let expected: Vec<&str> = r#"
++-----------+
+| min_scale |
++-----------+
+| 5         |
++-----------+"#
+            .split('\n')
+            .filter_map(|input| {
+                if input.is_empty() {
+                    None
+                } else {
+                    Some(input.trim())
+                }
+            })
+            .collect();
+
+        assert_batches_sorted_eq!(expected, &batches);
+
         Ok(())
     }
 

@@ -12,6 +12,7 @@ ipnet = "2.9.0"
 libm = "0.2.8"
 rand = "0.8.5"
 rand_distr = "0.4.3"
+rust_decimal = "1.36.0"
 serde = "1.0.198"
 serde_json = { version = "1.0.116", features = ["preserve_order"] }
 serde_json_path = "0.6.7"
